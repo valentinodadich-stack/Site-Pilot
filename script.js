@@ -66,6 +66,7 @@ async function handleScan() {
     renderHistory();
     attachCopyButton(data.feedback || []);
     attachFixButtons();
+    attachDownloadPdfButton();
   } catch (error) {
     statusBox.textContent = "Request failed.";
     resultBox.innerHTML = `
@@ -97,17 +98,27 @@ function renderResult(data) {
             <p style="margin:0; font-size:14px; color:#666;">Scanned website</p>
             <h2 style="margin:6px 0 0 0; font-size:22px; word-break:break-word;">${escapeHtml(data.url)}</h2>
           </div>
-          <div style="
-            min-width:120px;
-            text-align:center;
-            padding:16px;
-            border-radius:14px;
-            background:${scoreColor.background};
-            color:${scoreColor.text};
-            font-weight:bold;
-            font-size:28px;
-          ">
-            ${data.score}/100
+
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <button
+              id="downloadPdfBtn"
+              style="padding:10px 14px; font-size:14px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;"
+            >
+              Download PDF
+            </button>
+
+            <div style="
+              min-width:120px;
+              text-align:center;
+              padding:16px;
+              border-radius:14px;
+              background:${scoreColor.background};
+              color:${scoreColor.text};
+              font-weight:bold;
+              font-size:28px;
+            ">
+              ${data.score}/100
+            </div>
           </div>
         </div>
       </div>
@@ -169,6 +180,115 @@ function renderResult(data) {
         </div>
       </div>
 
+    </div>
+  `;
+}
+
+function attachDownloadPdfButton() {
+  const pdfBtn = document.getElementById("downloadPdfBtn");
+  if (!pdfBtn) return;
+
+  pdfBtn.addEventListener("click", async () => {
+    if (!lastScanData) return;
+
+    if (typeof html2pdf === "undefined") {
+      alert("PDF library is not loaded.");
+      return;
+    }
+
+    const originalText = pdfBtn.textContent;
+    pdfBtn.disabled = true;
+    pdfBtn.textContent = "Generating PDF...";
+
+    try {
+      const wrapper = document.createElement("div");
+      wrapper.style.position = "fixed";
+      wrapper.style.left = "-99999px";
+      wrapper.style.top = "0";
+      wrapper.style.width = "800px";
+      wrapper.style.background = "#ffffff";
+      wrapper.style.padding = "32px";
+      wrapper.style.fontFamily = "Arial, sans-serif";
+      wrapper.style.color = "#111827";
+      wrapper.innerHTML = buildPdfMarkup(lastScanData);
+
+      document.body.appendChild(wrapper);
+
+      const safeDomain = makeSafeFileName(lastScanData.url);
+      const filename = `sitepilot-report-${safeDomain}.pdf`;
+
+      const opt = {
+        margin: 0.5,
+        filename,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ["css", "legacy"] }
+      };
+
+      await html2pdf().set(opt).from(wrapper).save();
+
+      document.body.removeChild(wrapper);
+    } catch (error) {
+      alert(`PDF generation failed: ${error.message || error}`);
+    } finally {
+      pdfBtn.disabled = false;
+      pdfBtn.textContent = originalText;
+    }
+  });
+}
+
+function buildPdfMarkup(data) {
+  const issuesHtml = data.issues && data.issues.length
+    ? data.issues.map(item => `<li style="margin-bottom:8px;">${escapeHtml(item)}</li>`).join("")
+    : "<li>No major issues found.</li>";
+
+  const feedbackHtml = data.feedback && data.feedback.length
+    ? data.feedback.map(item => `
+        <div style="padding:12px 14px; margin-bottom:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
+          ${escapeHtml(item)}
+        </div>
+      `).join("")
+    : "<p>No feedback available.</p>";
+
+  return `
+    <div style="font-family:Arial, sans-serif;">
+      <div style="margin-bottom:24px;">
+        <div style="display:inline-block; padding:6px 10px; font-size:12px; font-weight:700; color:#4338ca; background:#eef2ff; border:1px solid #c7d2fe; border-radius:999px;">
+          SitePilot PDF Report
+        </div>
+        <h1 style="margin:16px 0 8px; font-size:32px;">Website Audit Report</h1>
+        <p style="margin:0; color:#475467;">Generated on ${escapeHtml(new Date().toLocaleString())}</p>
+      </div>
+
+      <div style="padding:20px; border:1px solid #e5e7eb; border-radius:16px; margin-bottom:20px;">
+        <h2 style="margin-top:0; font-size:22px;">Overview</h2>
+        <p><strong>Website:</strong> ${escapeHtml(data.url)}</p>
+        <p><strong>Score:</strong> ${data.score}/100</p>
+      </div>
+
+      <div style="padding:20px; border:1px solid #e5e7eb; border-radius:16px; margin-bottom:20px;">
+        <h2 style="margin-top:0; font-size:22px;">Scan Data</h2>
+        <p><strong>Title:</strong> ${escapeHtml(data.scanData.title || "None")}</p>
+        <p><strong>Meta Description:</strong> ${escapeHtml(data.scanData.metaDescription || "None")}</p>
+        <p><strong>H1:</strong> ${escapeHtml(data.scanData.h1 || "None")}</p>
+        <p><strong>Links:</strong> ${data.scanData.links}</p>
+        <p><strong>Images:</strong> ${data.scanData.images}</p>
+        <p><strong>Buttons:</strong> ${data.scanData.buttons}</p>
+        <p><strong>CTA Found:</strong> ${escapeHtml(data.scanData.cta || "None")}</p>
+      </div>
+
+      <div style="padding:20px; border:1px solid #e5e7eb; border-radius:16px; margin-bottom:20px; page-break-inside:avoid;">
+        <h2 style="margin-top:0; font-size:22px;">Issues</h2>
+        <ul style="padding-left:20px; margin-bottom:0;">
+          ${issuesHtml}
+        </ul>
+      </div>
+
+      <div style="padding:20px; border:1px solid #e5e7eb; border-radius:16px; margin-bottom:20px;">
+        <h2 style="margin-top:0; font-size:22px;">AI Feedback</h2>
+        ${feedbackHtml}
+      </div>
     </div>
   `;
 }
@@ -396,6 +516,15 @@ function getScoreColor(score) {
     background: "#fef3f2",
     text: "#b42318"
   };
+}
+
+function makeSafeFileName(url) {
+  return String(url)
+    .replace(/^https?:\/\//, "")
+    .replace(/[^a-zA-Z0-9.-]/g, "-")
+    .replace(/-+/g, "-")
+    .toLowerCase()
+    .slice(0, 60);
 }
 
 function escapeHtml(text) {
