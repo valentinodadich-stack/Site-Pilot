@@ -1,85 +1,145 @@
-import PDFDocument from "pdfkit";
+const PDFDocument = require("pdfkit");
 
-export const config = {
-  api: {
-    bodyParser: true
-  }
-};
-
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    res.status(405).json({ error: "Method not allowed" });
+    return;
   }
 
   try {
-    const { data } = req.body;
+    const { data } = req.body || {};
 
     if (!data) {
-      return res.status(400).json({ error: "Missing data" });
+      res.status(400).json({ error: "Missing data" });
+      return;
     }
 
-    const doc = new PDFDocument({ margin: 50 });
+    const doc = new PDFDocument({
+      margin: 50,
+      size: "A4"
+    });
 
     const chunks = [];
 
     doc.on("data", (chunk) => chunks.push(chunk));
 
     doc.on("end", () => {
-      const pdfBuffer = Buffer.concat(chunks);
+      try {
+        const pdfBuffer = Buffer.concat(chunks);
 
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        "attachment; filename=sitepilot-report.pdf"
-      );
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          'attachment; filename="sitepilot-report.pdf"'
+        );
+        res.setHeader("Content-Length", pdfBuffer.length);
 
-      res.status(200).send(pdfBuffer);
+        res.status(200).end(pdfBuffer);
+      } catch (err) {
+        res.status(500).json({
+          error: "Failed to send PDF",
+          details: err.message
+        });
+      }
     });
 
-    // ======================
-    // CONTENT
-    // ======================
+    // HEADER
+    doc.fontSize(26).fillColor("#111827").text("SitePilot Report", {
+      align: "center"
+    });
 
-    doc.fontSize(24).text("SitePilot Report", { align: "center" });
-    doc.moveDown();
+    doc.moveDown(0.4);
 
-    doc.fontSize(12).text(`Website: ${data.url}`);
-    doc.text(`Score: ${data.score}/100`);
-    doc.moveDown();
+    doc.fontSize(10).fillColor("gray").text("AI Website Analysis Report", {
+      align: "center"
+    });
 
-    doc.fontSize(16).text("Scan Data");
-    doc.moveDown(0.5);
+    doc.moveDown(1.5);
 
-    doc.fontSize(12).text(`Title: ${data.scanData.title || "None"}`);
-    doc.text(`Meta: ${data.scanData.metaDescription || "None"}`);
-    doc.text(`H1: ${data.scanData.h1 || "None"}`);
-    doc.moveDown();
+    // WEBSITE OVERVIEW
+    doc.fillColor("#111827").fontSize(16).text("Website Overview", {
+      underline: true
+    });
 
-    doc.fontSize(16).text("Issues");
-    doc.moveDown(0.5);
+    doc.moveDown(0.6);
 
-    if (data.issues && data.issues.length) {
-      data.issues.forEach((issue, i) => {
-        doc.text(`${i + 1}. ${issue}`);
+    doc.fontSize(12).fillColor("black");
+    doc.text(`Website: ${data.url || "Unknown"}`);
+    doc.text(`Score: ${data.score ?? "N/A"}/100`);
+    doc.text(`Generated: ${new Date().toLocaleString()}`);
+
+    doc.moveDown(1.5);
+
+    // SCAN DATA
+    doc.fontSize(16).fillColor("#111827").text("Scan Data", {
+      underline: true
+    });
+
+    doc.moveDown(0.6);
+
+    doc.fontSize(12).fillColor("black");
+    doc.text(`Title: ${data.scanData?.title || "None"}`);
+    doc.moveDown(0.3);
+    doc.text(`Meta Description: ${data.scanData?.metaDescription || "None"}`);
+    doc.moveDown(0.3);
+    doc.text(`H1: ${data.scanData?.h1 || "None"}`);
+    doc.moveDown(0.3);
+    doc.text(`Links: ${data.scanData?.links ?? 0}`);
+    doc.moveDown(0.3);
+    doc.text(`Images: ${data.scanData?.images ?? 0}`);
+    doc.moveDown(0.3);
+    doc.text(`Buttons: ${data.scanData?.buttons ?? 0}`);
+    doc.moveDown(0.3);
+    doc.text(`CTA Found: ${data.scanData?.cta || "None"}`);
+
+    doc.moveDown(1.5);
+
+    // ISSUES
+    doc.fontSize(16).fillColor("#111827").text("Issues Found", {
+      underline: true
+    });
+
+    doc.moveDown(0.6);
+
+    if (Array.isArray(data.issues) && data.issues.length > 0) {
+      data.issues.forEach((issue) => {
+        doc.fontSize(12).fillColor("black").text(`• ${issue}`);
+        doc.moveDown(0.3);
       });
     } else {
-      doc.text("No issues found");
+      doc.fontSize(12).fillColor("black").text("No major issues found.");
     }
 
-    doc.moveDown();
+    doc.moveDown(1.5);
 
-    doc.fontSize(16).text("AI Feedback");
-    doc.moveDown(0.5);
+    // AI FEEDBACK
+    doc.fontSize(16).fillColor("#111827").text("AI Recommendations", {
+      underline: true
+    });
 
-    if (data.feedback && data.feedback.length) {
-      data.feedback.forEach((item, i) => {
-        doc.text(`${i + 1}. ${item}`);
+    doc.moveDown(0.6);
+
+    if (Array.isArray(data.feedback) && data.feedback.length > 0) {
+      data.feedback.forEach((item, index) => {
+        doc.fontSize(12).fillColor("black").text(`${index + 1}. ${item}`);
         doc.moveDown(0.5);
       });
+    } else {
+      doc.fontSize(12).fillColor("black").text("No AI feedback available.");
     }
+
+    doc.moveDown(2);
+
+    // FOOTER
+    doc.fontSize(10).fillColor("gray").text("Generated by SitePilot AI", {
+      align: "center"
+    });
 
     doc.end();
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    res.status(500).json({
+      error: "Failed to generate PDF",
+      details: error.message
+    });
   }
-}
+};
