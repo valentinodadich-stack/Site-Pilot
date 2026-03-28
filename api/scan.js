@@ -1,3 +1,88 @@
+async function getAiFeedback(scanData, issues, url) {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    return [
+      "OpenAI API key is missing.",
+      "Add OPENAI_API_KEY in Vercel Environment Variables.",
+      "After that, AI feedback will work."
+    ];
+  }
+
+  const prompt = `
+You are a senior CRO (conversion rate optimization) and SEO expert.
+
+Analyze this website and give actionable, business-focused advice.
+
+Website: ${url}
+
+Data:
+- Title: ${scanData.title || "None"}
+- Meta: ${scanData.metaDescription || "None"}
+- H1: ${scanData.h1 || "None"}
+- Links: ${scanData.links}
+- Images: ${scanData.images}
+- Buttons: ${scanData.buttons}
+- CTA: ${scanData.cta || "None"}
+
+Issues:
+${issues.length ? issues.map((i) => `- ${i}`).join("\n") : "- None"}
+
+IMPORTANT:
+- Give EXACTLY 5 suggestions
+- Each suggestion must be 1 sentence
+- Be very practical and specific
+- Focus on increasing conversions and clarity
+- No generic advice
+
+Return ONLY a JSON array like:
+["...", "...", "..."]
+`;
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert website optimization assistant."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.5
+      })
+    });
+
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content;
+
+    if (!content) {
+      return ["AI feedback could not be generated."];
+    }
+
+    try {
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+      return ["AI returned an unexpected format."];
+    } catch {
+      return [content];
+    }
+  } catch (error) {
+    return [`AI request failed: ${error.message}`];
+  }
+}
+
 function decodeHtmlEntities(text) {
   if (!text) return "";
 
@@ -136,44 +221,6 @@ function buildScore(scanData) {
   return score;
 }
 
-function buildFeedback(scanData) {
-  const feedback = [];
-
-  if (!scanData.title) {
-    feedback.push("Add a clear, keyword-focused page title.");
-  } else {
-    feedback.push("Your title exists. Make sure it is specific and compelling.");
-  }
-
-  if (!scanData.metaDescription) {
-    feedback.push("Add a meta description to improve search visibility and click-through rate.");
-  } else {
-    feedback.push("Your meta description exists. Make sure it is persuasive and action-oriented.");
-  }
-
-  if (!scanData.h1) {
-    feedback.push("Add one strong H1 heading that explains the page instantly.");
-  } else {
-    feedback.push("Your H1 exists. Make sure it matches the main user intent.");
-  }
-
-  if (scanData.images === 0) {
-    feedback.push("Add visual content to make the page more engaging.");
-  }
-
-  if (scanData.buttons === 0) {
-    feedback.push("Add at least one clear button to guide users toward an action.");
-  }
-
-  if (!scanData.cta) {
-    feedback.push("Use stronger CTA text like 'Get Started', 'Shop Now', or 'Contact Us'.");
-  } else {
-    feedback.push(`CTA detected: "${scanData.cta}". Make sure it is visible above the fold.`);
-  }
-
-  return feedback;
-}
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -222,7 +269,7 @@ export default async function handler(req, res) {
 
     const issues = buildIssues(scanData);
     const score = buildScore(scanData);
-    const feedback = buildFeedback(scanData);
+    const feedback = await getAiFeedback(scanData, issues, normalizedUrl);
 
     return res.status(200).json({
       success: true,
