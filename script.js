@@ -91,11 +91,7 @@ async function handleScan() {
     }
 
     statusBox.textContent = `Scan completed. ${saveMessage}`;
-    resultBox.innerHTML = renderResult(data);
-
-    attachCopyButton(data.feedback || []);
-    attachFixButtons();
-    attachDownloadPdfButton();
+    renderFullScan(data);
   } catch (error) {
     statusBox.textContent = "Request failed.";
     resultBox.innerHTML = `
@@ -137,6 +133,41 @@ async function loadHistoryFromDatabase() {
       </div>
     `;
   }
+}
+
+function renderFullScan(data) {
+  resultBox.innerHTML = renderResult(data);
+  attachCopyButton(data.feedback || []);
+  attachFixButtons();
+  attachDownloadPdfButton();
+}
+
+function openHistoryScan(index) {
+  const item = scanHistory[index];
+  if (!item) return;
+
+  const reconstructed = {
+    url: item.url || "Unknown",
+    score: item.score ?? 0,
+    scanData: {
+      title: item.data?.scanData?.title || "",
+      metaDescription: item.data?.scanData?.metaDescription || "",
+      h1: item.data?.scanData?.h1 || "",
+      links: item.data?.scanData?.links ?? 0,
+      images: item.data?.scanData?.images ?? 0,
+      buttons: item.data?.scanData?.buttons ?? 0,
+      cta: item.data?.scanData?.cta || ""
+    },
+    issues: Array.isArray(item.data?.issues) ? item.data.issues : [],
+    feedback: Array.isArray(item.data?.feedback) ? item.data.feedback : []
+  };
+
+  lastScanData = reconstructed;
+  urlInput.value = reconstructed.url;
+  statusBox.textContent = `Loaded saved scan from ${item.created_at || "database"}.`;
+  renderFullScan(reconstructed);
+
+  resultBox.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function setLoadingState(isLoading) {
@@ -258,8 +289,21 @@ function renderHistory() {
     <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06); margin-top:24px;">
       <h3 style="margin-top:0;">Recent Scans (Database)</h3>
       <div style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
-        ${scanHistory.map(item => `
-          <div style="padding:14px 16px; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;">
+        ${scanHistory.map((item, index) => `
+          <button
+            data-history-index="${index}"
+            style="
+              padding:14px 16px;
+              border-radius:12px;
+              background:#f8fafc;
+              border:1px solid #e5e7eb;
+              text-align:left;
+              cursor:pointer;
+              transition:all 0.2s ease;
+            "
+            onmouseover="this.style.background='#eef2ff'"
+            onmouseout="this.style.background='#f8fafc'"
+          >
             <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
               <strong style="word-break:break-word;">${escapeHtml(item.url || "Unknown")}</strong>
               <span>${item.score ?? "N/A"}/100</span>
@@ -267,11 +311,19 @@ function renderHistory() {
             <div style="margin-top:6px; font-size:13px; color:#667085;">
               ${escapeHtml(item.created_at || "")}
             </div>
-          </div>
+          </button>
         `).join("")}
       </div>
     </div>
   `;
+
+  const buttons = historyBox.querySelectorAll("[data-history-index]");
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.getAttribute("data-history-index"));
+      openHistoryScan(index);
+    });
+  });
 }
 
 function attachDownloadPdfButton() {
