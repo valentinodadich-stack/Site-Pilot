@@ -72,7 +72,8 @@ async function handleScan() {
           score: data.score,
           scanData: data.scanData,
           issues: data.issues,
-          feedback: data.feedback
+          feedback: data.feedback,
+          priorityFixes: data.priorityFixes
         })
       });
 
@@ -159,7 +160,8 @@ function openHistoryScan(index) {
       cta: item.data?.scanData?.cta || ""
     },
     issues: Array.isArray(item.data?.issues) ? item.data.issues : [],
-    feedback: Array.isArray(item.data?.feedback) ? item.data.feedback : []
+    feedback: Array.isArray(item.data?.feedback) ? item.data.feedback : [],
+    priorityFixes: Array.isArray(item.data?.priorityFixes) ? item.data.priorityFixes : []
   };
 
   lastScanData = reconstructed;
@@ -207,6 +209,27 @@ function renderResult(data) {
               ${data.score}/100
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="sp-card" style="border:1px solid rgba(245,158,11,0.35);">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <h3 style="margin:0; color:var(--text);">Priority Fixes</h3>
+            <span class="sp-pill">Top 3</span>
+          </div>
+        </div>
+        <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px;">
+          ${
+            data.priorityFixes && data.priorityFixes.length
+              ? data.priorityFixes.map((item, index) => `
+                  <div class="sp-subcard" style="border-left:4px solid #f59e0b;">
+                    <strong style="display:block; margin-bottom:6px; color:var(--text);">Priority ${index + 1}</strong>
+                    <span style="color:var(--text);">${escapeHtml(item)}</span>
+                  </div>
+                `).join("")
+              : `<p>No priority fixes available.</p>`
+          }
         </div>
       </div>
 
