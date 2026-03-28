@@ -8,10 +8,11 @@ scanBtn.addEventListener("click", async () => {
 
   if (!url) {
     statusBox.textContent = "Please enter a URL.";
+    resultBox.innerHTML = "";
     return;
   }
 
-  statusBox.textContent = "Scanning...";
+  statusBox.textContent = "Scanning website...";
   resultBox.innerHTML = "";
 
   try {
@@ -26,48 +27,128 @@ scanBtn.addEventListener("click", async () => {
     const data = await response.json();
 
     if (!response.ok) {
-      statusBox.textContent = "Something went wrong.";
-      resultBox.innerHTML = `<p style="color:red;">${data.error}</p>`;
+      statusBox.textContent = "Scan failed.";
+      resultBox.innerHTML = `
+        <div style="padding:16px; border:1px solid #f3c2c2; background:#fff5f5; border-radius:12px;">
+          <h3 style="margin-top:0; color:#b42318;">Error</h3>
+          <p style="margin-bottom:0;">${escapeHtml(data.error || "Something went wrong.")}</p>
+        </div>
+      `;
       return;
     }
 
-    statusBox.textContent = "Done.";
+    statusBox.textContent = "Scan completed.";
     resultBox.innerHTML = renderResult(data);
   } catch (error) {
     statusBox.textContent = "Request failed.";
-    resultBox.innerHTML = `<p style="color:red;">${error.message || error}</p>`;
+    resultBox.innerHTML = `
+      <div style="padding:16px; border:1px solid #f3c2c2; background:#fff5f5; border-radius:12px;">
+        <h3 style="margin-top:0; color:#b42318;">Error</h3>
+        <p style="margin-bottom:0;">${escapeHtml(error.message || String(error))}</p>
+      </div>
+    `;
   }
 });
 
 function renderResult(data) {
-  if (!data) return "";
+  const scoreColor = getScoreColor(data.score);
 
   return `
-    <div style="margin-top:20px;">
-      <h2>Score: ${data.score}/100</h2>
+    <div style="display:flex; flex-direction:column; gap:20px; margin-top:20px;">
+      
+      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+          <div>
+            <p style="margin:0; font-size:14px; color:#666;">Scanned website</p>
+            <h2 style="margin:6px 0 0 0; font-size:22px;">${escapeHtml(data.url)}</h2>
+          </div>
+          <div style="
+            min-width:120px;
+            text-align:center;
+            padding:16px;
+            border-radius:14px;
+            background:${scoreColor.background};
+            color:${scoreColor.text};
+            font-weight:bold;
+            font-size:28px;
+          ">
+            ${data.score}/100
+          </div>
+        </div>
+      </div>
 
-      <h3>Scan Data</h3>
-      <p><strong>Title:</strong> ${data.scanData.title || "None"}</p>
-      <p><strong>Meta Description:</strong> ${data.scanData.metaDescription || "None"}</p>
-      <p><strong>H1:</strong> ${data.scanData.h1 || "None"}</p>
-      <p><strong>Links:</strong> ${data.scanData.links}</p>
-      <p><strong>Images:</strong> ${data.scanData.images}</p>
-      <p><strong>Buttons:</strong> ${data.scanData.buttons}</p>
-      <p><strong>CTA Found:</strong> ${data.scanData.cta || "None"}</p>
+      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+        <h3 style="margin-top:0;">Scan Data</h3>
+        <p><strong>Title:</strong> ${escapeHtml(data.scanData.title || "None")}</p>
+        <p><strong>Meta Description:</strong> ${escapeHtml(data.scanData.metaDescription || "None")}</p>
+        <p><strong>H1:</strong> ${escapeHtml(data.scanData.h1 || "None")}</p>
+        <p><strong>Links:</strong> ${data.scanData.links}</p>
+        <p><strong>Images:</strong> ${data.scanData.images}</p>
+        <p><strong>Buttons:</strong> ${data.scanData.buttons}</p>
+        <p><strong>CTA Found:</strong> ${escapeHtml(data.scanData.cta || "None")}</p>
+      </div>
 
-      <h3>Issues</h3>
-      <ul>
+      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+        <h3 style="margin-top:0;">Issues</h3>
         ${
-          data.issues.length > 0
-            ? data.issues.map(issue => `<li>${issue}</li>`).join("")
-            : "<li>No major issues found</li>"
+          data.issues && data.issues.length
+            ? `<ul style="padding-left:20px; margin-bottom:0;">
+                ${data.issues.map(issue => `
+                  <li style="margin-bottom:10px;">${escapeHtml(issue)}</li>
+                `).join("")}
+              </ul>`
+            : `<p style="margin-bottom:0;">No major issues found.</p>`
         }
-      </ul>
+      </div>
 
-      <h3>Feedback</h3>
-      <ul>
-        ${data.feedback.map(item => `<li>${item}</li>`).join("")}
-      </ul>
+      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <h3 style="margin:0;">AI Feedback</h3>
+          <span style="font-size:12px; background:#111; color:#fff; padding:6px 10px; border-radius:999px;">AI Powered</span>
+        </div>
+        <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px;">
+          ${
+            data.feedback && data.feedback.length
+              ? data.feedback.map(item => `
+                  <div style="padding:14px 16px; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;">
+                    ${escapeHtml(item)}
+                  </div>
+                `).join("")
+              : `<p>No feedback available.</p>`
+          }
+        </div>
+      </div>
+
     </div>
   `;
+}
+
+function getScoreColor(score) {
+  if (score >= 80) {
+    return {
+      background: "#ecfdf3",
+      text: "#027a48"
+    };
+  }
+
+  if (score >= 50) {
+    return {
+      background: "#fffaeb",
+      text: "#b54708"
+    };
+  }
+
+  return {
+    background: "#fef3f2",
+    text: "#b42318"
+  };
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
