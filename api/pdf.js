@@ -1,5 +1,11 @@
 import PDFDocument from "pdfkit";
 
+export const config = {
+  api: {
+    bodyParser: true
+  }
+};
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -14,24 +20,25 @@ export default async function handler(req, res) {
 
     const doc = new PDFDocument({ margin: 50 });
 
-    let buffers = [];
-    doc.on("data", buffers.push.bind(buffers));
+    const chunks = [];
+
+    doc.on("data", (chunk) => chunks.push(chunk));
 
     doc.on("end", () => {
-      const pdfData = Buffer.concat(buffers);
+      const pdfBuffer = Buffer.concat(chunks);
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename=sitepilot-report.pdf`
+        "attachment; filename=sitepilot-report.pdf"
       );
 
-      res.send(pdfData);
+      res.status(200).send(pdfBuffer);
     });
 
-    // =========================
-    // PDF CONTENT
-    // =========================
+    // ======================
+    // CONTENT
+    // ======================
 
     doc.fontSize(24).text("SitePilot Report", { align: "center" });
     doc.moveDown();
@@ -53,7 +60,7 @@ export default async function handler(req, res) {
 
     if (data.issues && data.issues.length) {
       data.issues.forEach((issue, i) => {
-        doc.fontSize(12).text(`${i + 1}. ${issue}`);
+        doc.text(`${i + 1}. ${issue}`);
       });
     } else {
       doc.text("No issues found");
@@ -66,13 +73,13 @@ export default async function handler(req, res) {
 
     if (data.feedback && data.feedback.length) {
       data.feedback.forEach((item, i) => {
-        doc.fontSize(12).text(`${i + 1}. ${item}`);
+        doc.text(`${i + 1}. ${item}`);
         doc.moveDown(0.5);
       });
     }
 
     doc.end();
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 }
