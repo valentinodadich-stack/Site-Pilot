@@ -4,7 +4,9 @@ const statusBox = document.getElementById("status");
 const resultBox = document.getElementById("result");
 const historyBox = document.getElementById("historyBox");
 
-let scanHistory = [];
+let scanHistory = loadHistory();
+
+renderHistory();
 
 scanBtn.addEventListener("click", handleScan);
 
@@ -180,6 +182,8 @@ function attachCopyButton(feedback) {
 }
 
 function addToHistory(url, score) {
+  scanHistory = scanHistory.filter((item) => item.url !== url);
+
   scanHistory.unshift({
     url,
     score,
@@ -189,6 +193,8 @@ function addToHistory(url, score) {
   if (scanHistory.length > 5) {
     scanHistory = scanHistory.slice(0, 5);
   }
+
+  saveHistory();
 }
 
 function renderHistory() {
@@ -199,8 +205,13 @@ function renderHistory() {
 
   historyBox.innerHTML = `
     <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
-      <h3 style="margin-top:0;">Recent Scans</h3>
-      <div style="display:flex; flex-direction:column; gap:12px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <h3 style="margin-top:0; margin-bottom:0;">Recent Scans</h3>
+        <button id="clearHistoryBtn" style="padding:8px 12px; font-size:13px; border:none; border-radius:10px; background:#ef4444; color:#fff; cursor:pointer;">
+          Clear History
+        </button>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
         ${scanHistory.map(item => `
           <div style="padding:14px 16px; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;">
             <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
@@ -213,6 +224,30 @@ function renderHistory() {
       </div>
     </div>
   `;
+
+  const clearBtn = document.getElementById("clearHistoryBtn");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", clearHistory);
+  }
+}
+
+function saveHistory() {
+  localStorage.setItem("sitepilot_scan_history", JSON.stringify(scanHistory));
+}
+
+function loadHistory() {
+  try {
+    const saved = localStorage.getItem("sitepilot_scan_history");
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function clearHistory() {
+  scanHistory = [];
+  localStorage.removeItem("sitepilot_scan_history");
+  renderHistory();
 }
 
 function getScoreColor(score) {
