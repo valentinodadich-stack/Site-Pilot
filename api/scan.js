@@ -1,128 +1,68 @@
-function extractTitle(html) {
-  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return match ? match[1].trim() : "";
-}
+const urlInput = document.getElementById("urlInput");
+const scanBtn = document.getElementById("scanBtn");
+const statusBox = document.getElementById("status");
+const resultBox = document.getElementById("result");
 
-function extractMetaDescription(html) {
-  const match = html.match(
-    /<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i
-  );
-  return match ? match[1].trim() : "";
-}
+scanBtn.addEventListener("click", async () => {
+  const url = urlInput.value.trim();
 
-function extractH1(html) {
-  const match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-  return match ? match[1].replace(/<[^>]+>/g, "").trim() : "";
-}
-
-function buildIssues({ title, metaDescription, h1 }) {
-  const issues = [];
-
-  if (!title) {
-    issues.push("Missing page title");
-  } else if (title.length < 20) {
-    issues.push("Title is too short");
+  if (!url) {
+    statusBox.textContent = "Please enter a URL.";
+    return;
   }
 
-  if (!metaDescription) {
-    issues.push("Missing meta description");
-  } else if (metaDescription.length < 50) {
-    issues.push("Meta description is too short");
-  }
-
-  if (!h1) {
-    issues.push("Missing H1 heading");
-  }
-
-  return issues;
-}
-
-function buildScore({ title, metaDescription, h1 }) {
-  let score = 100;
-
-  if (!title) score -= 25;
-  else if (title.length < 20) score -= 10;
-
-  if (!metaDescription) score -= 25;
-  else if (metaDescription.length < 50) score -= 10;
-
-  if (!h1) score -= 20;
-
-  if (score < 0) score = 0;
-  return score;
-}
-
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  statusBox.textContent = "Scanning...";
+  resultBox.innerHTML = "";
 
   try {
-    const { url } = req.body;
-
-    if (!url) {
-      return res.status(400).json({ error: "URL is required" });
-    }
-
-    let normalizedUrl = url.trim();
-
-    if (
-      !normalizedUrl.startsWith("http://") &&
-      !normalizedUrl.startsWith("https://")
-    ) {
-      normalizedUrl = `https://${normalizedUrl}`;
-    }
-
-    const response = await fetch(normalizedUrl, {
+    const response = await fetch("/api/scan", {
+      method: "POST",
       headers: {
-        "User-Agent": "SitePilotBot/1.0"
-      }
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ url })
     });
+
+    const data = await response.json();
 
     if (!response.ok) {
-      return res.status(400).json({
-        error: "Could not fetch website",
-        status: response.status
-      });
+      statusBox.textContent = "Something went wrong.";
+      resultBox.innerHTML = `<p style="color:red;">${data.error}</p>`;
+      return;
     }
 
-    const html = await response.text();
+    statusBox.textContent = "Done.";
+    resultBox.innerHTML = renderResult(data);
 
-    const title = extractTitle(html);
-    const metaDescription = extractMetaDescription(html);
-    const h1 = extractH1(html);
-
-    const scanData = {
-      title,
-      metaDescription,
-      h1
-    };
-
-    const issues = buildIssues(scanData);
-    const score = buildScore(scanData);
-
-    return res.status(200).json({
-      success: true,
-      url: normalizedUrl,
-      score,
-      scanData,
-      issues,
-      feedback: [
-        !title
-          ? "Add a clear and keyword-focused page title."
-          : "Your page title exists. Make sure it clearly explains the page.",
-        !metaDescription
-          ? "Add a compelling meta description to improve search visibility."
-          : "Your meta description exists. Make sure it encourages clicks.",
-        !h1
-          ? "Add one strong H1 headline that explains the page instantly."
-          : "Your page has an H1. Make sure it matches the page intent."
-      ]
-    });
   } catch (error) {
-    return res.status(500).json({
-      error: "Scan failed",
-      details: error.message
-    });
+    statusBox.textContent = "Request failed.";
+    resultBox.innerHTML = `<p style="color:red;">${error}</p>`;
   }
+});
+
+function renderResult(data) {
+  if (!data) return "";
+
+  return `
+    <div style="margin-top:20px;">
+      <h2>Score: ${data.score}/100</h2>
+
+      <h3>Scan Data</h3>
+      <p><strong>Title:</strong> ${data.scanData.title || "None"}</p>
+      <p><strong>Meta Description:</strong> ${data.scanData.metaDescription || "None"}</p>
+      <p><strong>H1:</strong> ${data.scanData.h1 || "None"}</p>
+
+      <h3>Issues</h3>
+      <ul>
+        ${data.issues.length > 0 
+          ? data.issues.map(issue => `<li>${issue}</li>`).join("") 
+          : "<li>No major issues found</li>"}
+      </ul>
+
+      <h3>Feedback</h3>
+      <ul>
+        ${data.feedback.map(f => `<li>${f}</li>`).join("")}
+      </ul>
+    </div>
+  `;
 }
