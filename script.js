@@ -49,9 +49,9 @@ async function handleScan() {
     if (!response.ok) {
       statusBox.textContent = "Scan failed.";
       resultBox.innerHTML = `
-        <div style="padding:16px; border:1px solid #f3c2c2; background:#fff5f5; border-radius:12px;">
-          <h3 style="margin-top:0; color:#b42318;">Error</h3>
-          <p style="margin-bottom:0;">${escapeHtml(data.error || "Something went wrong.")}</p>
+        <div class="sp-card" style="border:1px solid var(--danger-border); background:var(--danger-bg);">
+          <h3 style="margin-top:0; color:var(--danger-text);">Error</h3>
+          <p style="margin-bottom:0; color:var(--text);">${escapeHtml(data.error || "Something went wrong.")}</p>
         </div>
       `;
       return;
@@ -95,9 +95,9 @@ async function handleScan() {
   } catch (error) {
     statusBox.textContent = "Request failed.";
     resultBox.innerHTML = `
-      <div style="padding:16px; border:1px solid #f3c2c2; background:#fff5f5; border-radius:12px;">
-        <h3 style="margin-top:0; color:#b42318;">Error</h3>
-        <p style="margin-bottom:0;">${escapeHtml(error.message || String(error))}</p>
+      <div class="sp-card" style="border:1px solid var(--danger-border); background:var(--danger-bg);">
+        <h3 style="margin-top:0; color:var(--danger-text);">Error</h3>
+        <p style="margin-bottom:0; color:var(--text);">${escapeHtml(error.message || String(error))}</p>
       </div>
     `;
   } finally {
@@ -113,8 +113,8 @@ async function loadHistoryFromDatabase() {
     if (!response.ok) {
       console.error("Failed to load history:", data);
       historyBox.innerHTML = `
-        <div style="padding:16px; border:1px solid #f3c2c2; background:#fff5f5; border-radius:12px; margin-top:20px;">
-          <h3 style="margin-top:0; color:#b42318;">History Error</h3>
+        <div class="sp-card" style="margin-top:20px; border:1px solid var(--danger-border); background:var(--danger-bg);">
+          <h3 style="margin-top:0; color:var(--danger-text);">History Error</h3>
           <p><strong>Error:</strong> ${escapeHtml(data.error || "Failed to load history.")}</p>
           <p style="margin-bottom:0;"><strong>Details:</strong> ${escapeHtml(data.details || "No details available.")}</p>
         </div>
@@ -127,8 +127,8 @@ async function loadHistoryFromDatabase() {
   } catch (error) {
     console.error("History request failed:", error);
     historyBox.innerHTML = `
-      <div style="padding:16px; border:1px solid #f3c2c2; background:#fff5f5; border-radius:12px; margin-top:20px;">
-        <h3 style="margin-top:0; color:#b42318;">History Error</h3>
+      <div class="sp-card" style="margin-top:20px; border:1px solid var(--danger-border); background:var(--danger-bg);">
+        <h3 style="margin-top:0; color:var(--danger-text);">History Error</h3>
         <p style="margin-bottom:0;">${escapeHtml(error.message || String(error))}</p>
       </div>
     `;
@@ -182,18 +182,15 @@ function renderResult(data) {
   return `
     <div style="display:flex; flex-direction:column; gap:20px; margin-top:20px;">
       
-      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+      <div class="sp-card">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
           <div>
-            <p style="margin:0; font-size:14px; color:#666;">Scanned website</p>
-            <h2 style="margin:6px 0 0 0; font-size:22px; word-break:break-word;">${escapeHtml(data.url)}</h2>
+            <p style="margin:0; font-size:14px; color:var(--muted-text);">Scanned website</p>
+            <h2 style="margin:6px 0 0 0; font-size:22px; word-break:break-word; color:var(--text);">${escapeHtml(data.url)}</h2>
           </div>
 
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-            <button
-              id="downloadPdfBtn"
-              style="padding:10px 14px; font-size:14px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;"
-            >
+            <button id="downloadPdfBtn" class="sp-button-secondary">
               Download PDF
             </button>
 
@@ -213,13 +210,13 @@ function renderResult(data) {
         </div>
       </div>
 
-      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+      <div class="sp-card">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-          <h3 style="margin-top:0; margin-bottom:0;">Scan Data</h3>
+          <h3 style="margin-top:0; margin-bottom:0; color:var(--text);">Scan Data</h3>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button id="fixTitleBtn" style="padding:10px 12px; font-size:13px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;">Fix Title</button>
-            <button id="fixMetaBtn" style="padding:10px 12px; font-size:13px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;">Fix Meta</button>
-            <button id="fixH1Btn" style="padding:10px 12px; font-size:13px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;">Fix H1</button>
+            <button id="fixTitleBtn" class="sp-button-secondary">Fix Title</button>
+            <button id="fixMetaBtn" class="sp-button-secondary">Fix Meta</button>
+            <button id="fixH1Btn" class="sp-button-secondary">Fix H1</button>
           </div>
         </div>
 
@@ -234,26 +231,26 @@ function renderResult(data) {
 
       <div id="fixResultsBox"></div>
 
-      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
-        <h3 style="margin-top:0;">Issues</h3>
+      <div class="sp-card">
+        <h3 style="margin-top:0; color:var(--text);">Issues</h3>
         ${
           data.issues && data.issues.length
             ? `<ul style="padding-left:20px; margin-bottom:0;">
                 ${data.issues.map(issue => `
-                  <li style="margin-bottom:10px;">${escapeHtml(issue)}</li>
+                  <li style="margin-bottom:10px; color:var(--text);">${escapeHtml(issue)}</li>
                 `).join("")}
               </ul>`
             : `<p style="margin-bottom:0;">No major issues found.</p>`
         }
       </div>
 
-      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+      <div class="sp-card">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
           <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            <h3 style="margin:0;">AI Feedback</h3>
-            <span style="font-size:12px; background:#111; color:#fff; padding:6px 10px; border-radius:999px;">AI Powered</span>
+            <h3 style="margin:0; color:var(--text);">AI Feedback</h3>
+            <span class="sp-pill">AI Powered</span>
           </div>
-          <button id="copyFeedbackBtn" style="padding:10px 14px; font-size:14px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;">
+          <button id="copyFeedbackBtn" class="sp-button-secondary">
             Copy Feedback
           </button>
         </div>
@@ -261,7 +258,7 @@ function renderResult(data) {
           ${
             data.feedback && data.feedback.length
               ? data.feedback.map(item => `
-                  <div style="padding:14px 16px; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;">
+                  <div class="sp-subcard">
                     ${escapeHtml(item)}
                   </div>
                 `).join("")
@@ -277,8 +274,8 @@ function renderResult(data) {
 function renderHistory() {
   if (!scanHistory.length) {
     historyBox.innerHTML = `
-      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06); margin-top:24px;">
-        <h3 style="margin-top:0;">Recent Scans</h3>
+      <div class="sp-card" style="margin-top:24px;">
+        <h3 style="margin-top:0; color:var(--text);">Recent Scans</h3>
         <p style="margin-bottom:0;">No scans saved yet.</p>
       </div>
     `;
@@ -286,29 +283,19 @@ function renderHistory() {
   }
 
   historyBox.innerHTML = `
-    <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06); margin-top:24px;">
-      <h3 style="margin-top:0;">Recent Scans (Database)</h3>
+    <div class="sp-card" style="margin-top:24px;">
+      <h3 style="margin-top:0; color:var(--text);">Recent Scans (Database)</h3>
       <div style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
         ${scanHistory.map((item, index) => `
           <button
             data-history-index="${index}"
-            style="
-              padding:14px 16px;
-              border-radius:12px;
-              background:#f8fafc;
-              border:1px solid #e5e7eb;
-              text-align:left;
-              cursor:pointer;
-              transition:all 0.2s ease;
-            "
-            onmouseover="this.style.background='#eef2ff'"
-            onmouseout="this.style.background='#f8fafc'"
+            class="sp-history-item"
           >
             <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-              <strong style="word-break:break-word;">${escapeHtml(item.url || "Unknown")}</strong>
-              <span>${item.score ?? "N/A"}/100</span>
+              <strong style="word-break:break-word; color:var(--text);">${escapeHtml(item.url || "Unknown")}</strong>
+              <span style="color:var(--text);">${item.score ?? "N/A"}/100</span>
             </div>
-            <div style="margin-top:6px; font-size:13px; color:#667085;">
+            <div style="margin-top:6px; font-size:13px; color:var(--muted-text);">
               ${escapeHtml(item.created_at || "")}
             </div>
           </button>
@@ -399,7 +386,7 @@ async function handleFix(type) {
   if (!box) return;
 
   box.innerHTML = `
-    <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+    <div class="sp-card">
       <div style="display:flex; align-items:center; gap:10px;">
         <span class="spinner"></span>
         <span>Generating AI ${escapeHtml(type)} suggestions...</span>
@@ -424,8 +411,8 @@ async function handleFix(type) {
 
     if (!response.ok) {
       box.innerHTML = `
-        <div style="padding:20px; border-radius:16px; background:#fff5f5; border:1px solid #f3c2c2;">
-          <h3 style="margin-top:0; color:#b42318;">Fix Error</h3>
+        <div class="sp-card" style="border:1px solid var(--danger-border); background:var(--danger-bg);">
+          <h3 style="margin-top:0; color:var(--danger-text);">Fix Error</h3>
           <p style="margin-bottom:0;">${escapeHtml(data.error || "Failed to generate suggestions.")}</p>
         </div>
       `;
@@ -433,10 +420,10 @@ async function handleFix(type) {
     }
 
     box.innerHTML = `
-      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+      <div class="sp-card">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-          <h3 style="margin:0;">AI ${escapeHtml(type.toUpperCase())} Suggestions</h3>
-          <button id="copyFixBtn" style="padding:10px 14px; font-size:14px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;">
+          <h3 style="margin:0; color:var(--text);">AI ${escapeHtml(type.toUpperCase())} Suggestions</h3>
+          <button id="copyFixBtn" class="sp-button-secondary">
             Copy Suggestions
           </button>
         </div>
@@ -444,7 +431,7 @@ async function handleFix(type) {
           ${
             data.suggestions && data.suggestions.length
               ? data.suggestions.map(item => `
-                  <div style="padding:14px 16px; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;">
+                  <div class="sp-subcard">
                     ${escapeHtml(item)}
                   </div>
                 `).join("")
@@ -457,8 +444,8 @@ async function handleFix(type) {
     attachCopyFixButton(data.suggestions || []);
   } catch (error) {
     box.innerHTML = `
-      <div style="padding:20px; border-radius:16px; background:#fff5f5; border:1px solid #f3c2c2;">
-        <h3 style="margin-top:0; color:#b42318;">Fix Error</h3>
+      <div class="sp-card" style="border:1px solid var(--danger-border); background:var(--danger-bg);">
+        <h3 style="margin-top:0; color:var(--danger-text);">Fix Error</h3>
         <p style="margin-bottom:0;">${escapeHtml(error.message || String(error))}</p>
       </div>
     `;
@@ -506,9 +493,9 @@ function setLoadingState(isLoading) {
 }
 
 function getScoreColor(score) {
-  if (score >= 80) return { background: "#ecfdf3", text: "#027a48" };
-  if (score >= 50) return { background: "#fffaeb", text: "#b54708" };
-  return { background: "#fef3f2", text: "#b42318" };
+  if (score >= 80) return { background: "rgba(16,185,129,0.15)", text: "#10b981" };
+  if (score >= 50) return { background: "rgba(245,158,11,0.15)", text: "#f59e0b" };
+  return { background: "rgba(239,68,68,0.15)", text: "#ef4444" };
 }
 
 function makeSafeFileName(url) {
