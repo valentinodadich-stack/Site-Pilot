@@ -1,34 +1,23 @@
 import PDFDocument from 'pdfkit';
 
-/**
- * SitePilot - Premium PDF Report
- * Works as a Vercel serverless function.
- *
- * Expected request body (flexible, with fallbacks):
- * {
- *   url: "https://example.com",
- *   scannedAt: "2026-03-29T10:00:00.000Z",
- *   result: {
- *     score: 78,
- *     title: "...",
- *     metaDescription: "...",
- *     h1: "...",
- *     linkCount: 23,
- *     imageCount: 8,
- *     buttonCount: 4,
- *     cta: "Start free trial",
- *     issues: ["..."],
- *     aiFeedback: ["...", "..."],
- *     priorityFixes: ["...", "...", "..."],
- *     topNextActions: ["...", "...", "..."]
- *   }
- * }
- *
- * Also supports:
- * - body.scan
- * - body.data
- * - older flat payloads
- */
+const COLORS = {
+  ink: '#0F172A',
+  text: '#111827',
+  muted: '#6B7280',
+  soft: '#94A3B8',
+  border: '#E5E7EB',
+  panel: '#F8FAFC',
+  white: '#FFFFFF',
+  accent: '#4F46E5',
+  accentSoft: '#EEF2FF',
+  success: '#059669',
+  successSoft: '#ECFDF5',
+  warning: '#D97706',
+  warningSoft: '#FFF7ED',
+  danger: '#DC2626',
+  dangerSoft: '#FEF2F2',
+  dark: '#0B1220'
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -39,6 +28,8 @@ export default async function handler(req, res) {
   try {
     const body = parseBody(req.body);
     const report = normalizePayload(body);
+
+    const branding = await resolveBranding(report.url);
 
     const doc = new PDFDocument({
       size: 'A4',
@@ -66,7 +57,7 @@ export default async function handler(req, res) {
       res.status(200).end(pdfBuffer);
     });
 
-    drawReport(doc, report);
+    await drawReport(doc, report, branding);
     addPageNumbers(doc);
     doc.end();
   } catch (error) {
@@ -113,15 +104,9 @@ function normalizePayload(body = {}) {
   const h1 = safeString(source.h1 || source.heading || 'Not found');
   const cta = safeString(source.cta || source.primaryCta || 'Not detected');
 
-  const linkCount = safeNumber(
-    source.linkCount ?? source.links ?? source.linksCount ?? 0
-  );
-  const imageCount = safeNumber(
-    source.imageCount ?? source.images ?? source.imagesCount ?? 0
-  );
-  const buttonCount = safeNumber(
-    source.buttonCount ?? source.buttons ?? source.buttonsCount ?? 0
-  );
+  const linkCount = safeNumber(source.linkCount ?? source.links ?? source.linksCount ?? 0);
+  const imageCount = safeNumber(source.imageCount ?? source.images ?? source.imagesCount ?? 0);
+  const buttonCount = safeNumber(source.buttonCount ?? source.buttons ?? source.buttonsCount ?? 0);
 
   const score = clampNumber(safeNumber(source.score ?? source.totalScore ?? 0), 0, 100);
 
@@ -224,7 +209,7 @@ function buildTopNextActions(data) {
 
   if (!data.title || data.title === 'Not found' || data.title.length < 20) {
     actions.push(
-      'Rewrite the page title so it clearly states the offer and primary keyword in 50-60 characters.'
+      'Rewrite the page title so it clearly states the offer and primary keyword in 50–60 characters.'
     );
   }
 
@@ -258,7 +243,7 @@ function buildTopNextActions(data) {
 
   if (data.imageCount === 0) {
     actions.push(
-      'Add visual proof elements such as product screenshots, before/after examples or trust visuals.'
+      'Add visual proof elements such as product screenshots, trust badges or real product visuals.'
     );
   }
 
@@ -274,7 +259,7 @@ function buildTopNextActions(data) {
     );
   } else if (data.score < 80) {
     actions.push(
-      'The page has a solid base - now tighten messaging, CTA placement and search snippet quality.'
+      'The page has a solid base — now tighten messaging, CTA placement and search snippet quality.'
     );
   } else {
     actions.push(
@@ -321,29 +306,219 @@ function cleanSentence(value) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                                   DESIGN                                   */
+/*                              BRANDING / LOGO                               */
 /* -------------------------------------------------------------------------- */
 
-const COLORS = {
-  ink: '#111827',
-  muted: '#6B7280',
-  soft: '#9CA3AF',
-  border: '#E5E7EB',
-  panel: '#F9FAFB',
-  accent: '#4F46E5',
-  accentSoft: '#EEF2FF',
-  success: '#059669',
-  warning: '#D97706',
-  danger: '#DC2626',
-  scoreBg: '#F3F4F6',
-  dark: '#0F172A'
-};
+async function resolveBranding(inputUrl) {
+  const fallback = {
+    siteName: hostnameFromUrl(inputUrl),
+    logoBuffer: null,
+    logoMime: null,
+    logoSourceUrl: null
+  };
 
-function drawReport(doc, report) {
-  drawCover(doc, report);
+  try {
+    const normalizedUrl = ensureUrl(inputUrl);
+    if (!normalizedUrl) return fallback;
+
+    const response = await fetch(normalizedUrl, {
+      headers: {
+        'User-Agent': 'SitePilotBot/1.0 (+https://sitepilot.app)'
+      }
+    });
+
+    if (!response.ok) return fallback;
+
+    const html = await response.text();
+    const siteName =
+      extractMetaContent(html, 'property', 'og:site_name') ||
+      extractMetaContent(html, 'name', 'application-name') ||
+      extractTitle(html) ||
+      hostnameFromUrl(normalizedUrl);
+
+    const logoCandidates = extractLogoCandidates(html, normalizedUrl);
+
+    for (const candidateUrl of logoCandidates) {
+      const imageResult = await downloadUsableImage(candidateUrl);
+      if (imageResult) {
+        return {
+          siteName: safeString(siteName),
+          logoBuffer: imageResult.buffer,
+          logoMime: imageResult.mime,
+          logoSourceUrl: candidateUrl
+        };
+      }
+    }
+
+    return {
+      ...fallback,
+      siteName: safeString(siteName)
+    };
+  } catch (error) {
+    console.error('Branding resolve error:', error);
+    return fallback;
+  }
+}
+
+function extractLogoCandidates(html, baseUrl) {
+  const candidates = [];
+
+  const appleTouch = extractLinkHrefByRelContains(html, 'apple-touch-icon');
+  const icon = extractLinkHrefByRelContains(html, 'icon');
+  const shortcutIcon = extractLinkHrefByRelContains(html, 'shortcut icon');
+  const ogImage = extractMetaContent(html, 'property', 'og:image');
+
+  pushCandidate(candidates, appleTouch, baseUrl);
+  pushCandidate(candidates, icon, baseUrl);
+  pushCandidate(candidates, shortcutIcon, baseUrl);
+  pushCandidate(candidates, ogImage, baseUrl);
+
+  return dedupeStrings(
+    candidates.filter((url) => {
+      const lower = url.toLowerCase();
+      if (lower.endsWith('.svg')) return false;
+      if (lower.endsWith('.ico')) return false;
+      return true;
+    })
+  );
+}
+
+function pushCandidate(list, value, baseUrl) {
+  const resolved = absoluteUrl(value, baseUrl);
+  if (resolved) list.push(resolved);
+}
+
+function dedupeStrings(items) {
+  const seen = new Set();
+  const output = [];
+
+  for (const item of items) {
+    const key = safeString(item).toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    output.push(item);
+  }
+
+  return output;
+}
+
+async function downloadUsableImage(url) {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'SitePilotBot/1.0 (+https://sitepilot.app)'
+      }
+    });
+
+    if (!response.ok) return null;
+
+    const mime = safeString(response.headers.get('content-type')).toLowerCase();
+
+    if (!mime.includes('image/png') && !mime.includes('image/jpeg') && !mime.includes('image/jpg')) {
+      return null;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    if (!buffer || buffer.length === 0) return null;
+
+    return { buffer, mime };
+  } catch (error) {
+    console.error('downloadUsableImage error:', error);
+    return null;
+  }
+}
+
+function extractMetaContent(html, attrName, attrValue) {
+  const regex = new RegExp(
+    `<meta[^>]*${attrName}=["']${escapeRegex(attrValue)}["'][^>]*content=["']([^"']+)["'][^>]*>`,
+    'i'
+  );
+  const reverseRegex = new RegExp(
+    `<meta[^>]*content=["']([^"']+)["'][^>]*${attrName}=["']${escapeRegex(attrValue)}["'][^>]*>`,
+    'i'
+  );
+
+  const match = html.match(regex) || html.match(reverseRegex);
+  return match ? decodeHtml(match[1]) : '';
+}
+
+function extractLinkHrefByRelContains(html, relPart) {
+  const regex = /<link\b[^>]*rel=["']([^"']+)["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
+  let match;
+
+  while ((match = regex.exec(html)) !== null) {
+    const rel = safeString(match[1]).toLowerCase();
+    const href = safeString(match[2]);
+    if (rel.includes(relPart.toLowerCase()) && href) {
+      return decodeHtml(href);
+    }
+  }
+
+  const reverseRegex = /<link\b[^>]*href=["']([^"']+)["'][^>]*rel=["']([^"']+)["'][^>]*>/gi;
+  while ((match = reverseRegex.exec(html)) !== null) {
+    const href = safeString(match[1]);
+    const rel = safeString(match[2]).toLowerCase();
+    if (rel.includes(relPart.toLowerCase()) && href) {
+      return decodeHtml(href);
+    }
+  }
+
+  return '';
+}
+
+function extractTitle(html) {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return match ? decodeHtml(match[1]) : '';
+}
+
+function absoluteUrl(value, baseUrl) {
+  try {
+    if (!value) return '';
+    return new URL(value, baseUrl).toString();
+  } catch {
+    return '';
+  }
+}
+
+function hostnameFromUrl(value) {
+  try {
+    return new URL(ensureUrl(value)).hostname.replace(/^www\./i, '');
+  } catch {
+    return safeString(value);
+  }
+}
+
+function ensureUrl(value) {
+  const raw = safeString(value);
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `https://${raw}`;
+}
+
+function escapeRegex(value) {
+  return safeString(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function decodeHtml(value) {
+  return safeString(value)
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                   DRAWING                                  */
+/* -------------------------------------------------------------------------- */
+
+async function drawReport(doc, report, branding) {
+  await drawCover(doc, report, branding);
   doc.addPage();
 
-  drawHeaderBar(doc, report);
+  drawHeaderBar(doc, report, branding);
   drawOverviewSection(doc, report);
   drawMetricsSection(doc, report);
   drawSummaryCards(doc, report);
@@ -365,7 +540,7 @@ function drawReport(doc, report) {
   });
 }
 
-function drawCover(doc, report) {
+async function drawCover(doc, report, branding) {
   const pageWidth = doc.page.width;
   const pageHeight = doc.page.height;
 
@@ -376,13 +551,10 @@ function drawCover(doc, report) {
   doc.restore();
 
   doc.save();
-  doc.roundedRect(50, 140, pageWidth - 100, 140, 18).fill(COLORS.accentSoft);
+  doc.roundedRect(50, 140, pageWidth - 100, 150, 20).fill(COLORS.accentSoft);
   doc.restore();
 
-  doc.fillColor('#FFFFFF')
-    .font('Helvetica-Bold')
-    .fontSize(12)
-    .text('SITEPILOT', 50, 54, { width: 150, align: 'left' });
+  drawSitePilotMark(doc, 50, 48);
 
   doc.fillColor('#FFFFFF')
     .font('Helvetica-Bold')
@@ -400,14 +572,18 @@ function drawCover(doc, report) {
   doc.fillColor(COLORS.ink)
     .font('Helvetica-Bold')
     .fontSize(19)
-    .text(report.url, 72, 186, {
+    .text(report.url, 72, 188, {
       width: pageWidth - 144
     });
 
   doc.fillColor(COLORS.muted)
     .font('Helvetica')
     .fontSize(11)
-    .text(`Generated: ${formatDate(report.scannedAt)}`, 72, 230);
+    .text(`Generated: ${formatDate(report.scannedAt)}`, 72, 235);
+
+  if (branding?.logoBuffer) {
+    drawBrandLogoBlock(doc, branding, pageWidth - 190, 46, 120, 56);
+  }
 
   drawScoreCard(doc, report.score, 50, 330, pageWidth - 100, 165);
 
@@ -417,12 +593,52 @@ function drawCover(doc, report) {
     .text(
       'SitePilot turns technical page analysis into clear SEO, UX and conversion actions.',
       50,
-      560,
+      565,
       {
-        width: pageWidth - 100,
-        align: 'left'
+        width: pageWidth - 100
       }
     );
+}
+
+function drawBrandLogoBlock(doc, branding, x, y, w, h) {
+  doc.save();
+  doc.roundedRect(x, y, w, h, 14).fill('#FFFFFF');
+  doc.restore();
+
+  try {
+    doc.image(branding.logoBuffer, x + 12, y + 10, {
+      fit: [36, 36],
+      align: 'center',
+      valign: 'center'
+    });
+  } catch (error) {
+    console.error('Brand logo draw error:', error);
+  }
+
+  doc.fillColor(COLORS.text)
+    .font('Helvetica-Bold')
+    .fontSize(9)
+    .text(branding.siteName || 'Brand', x + 56, y + 16, {
+      width: w - 64
+    });
+
+  doc.fillColor(COLORS.muted)
+    .font('Helvetica')
+    .fontSize(7.5)
+    .text('Detected brand', x + 56, y + 30, {
+      width: w - 64
+    });
+}
+
+function drawSitePilotMark(doc, x, y) {
+  doc.save();
+  doc.roundedRect(x, y, 90, 26, 13).fill(COLORS.white);
+  doc.restore();
+
+  doc.fillColor(COLORS.accent)
+    .font('Helvetica-Bold')
+    .fontSize(11)
+    .text('SITEPILOT', x + 14, y + 8);
 }
 
 function drawScoreCard(doc, score, x, y, w, h) {
@@ -430,7 +646,7 @@ function drawScoreCard(doc, score, x, y, w, h) {
   doc.roundedRect(x, y, w, h, 18).fill(COLORS.panel);
   doc.restore();
 
-  doc.fillColor(COLORS.ink)
+  doc.fillColor(COLORS.text)
     .font('Helvetica-Bold')
     .fontSize(14)
     .text('Overall Score', x + 24, y + 22);
@@ -439,7 +655,7 @@ function drawScoreCard(doc, score, x, y, w, h) {
     score >= 80 ? COLORS.success : score >= 60 ? COLORS.warning : COLORS.danger;
 
   doc.save();
-  doc.circle(x + 80, y + 96, 42).fill(COLORS.scoreBg);
+  doc.circle(x + 80, y + 96, 42).fill('#EEF2F7');
   doc.restore();
 
   doc.fillColor(scoreColor)
@@ -459,7 +675,7 @@ function drawScoreCard(doc, score, x, y, w, h) {
       ? 'Good base with clear upside. Priority fixes can noticeably improve performance.'
       : 'High-impact opportunities detected. Fix the core clarity, SEO and CTA issues first.';
 
-  doc.fillColor(COLORS.ink)
+  doc.fillColor(COLORS.text)
     .font('Helvetica-Bold')
     .fontSize(12)
     .text('Executive summary', x + 155, y + 40);
@@ -485,7 +701,7 @@ function drawScoreCard(doc, score, x, y, w, h) {
     .text(badgeText, x + 167, y + 117);
 }
 
-function drawHeaderBar(doc, report) {
+function drawHeaderBar(doc, report, branding) {
   doc.save();
   doc.roundedRect(50, 44, doc.page.width - 100, 42, 12).fill(COLORS.dark);
   doc.restore();
@@ -495,11 +711,23 @@ function drawHeaderBar(doc, report) {
     .fontSize(14)
     .text('SitePilot Analysis Report', 68, 58);
 
+  if (branding?.logoBuffer) {
+    try {
+      doc.image(branding.logoBuffer, doc.page.width - 132, 50, {
+        fit: [20, 20],
+        align: 'center',
+        valign: 'center'
+      });
+    } catch (error) {
+      console.error('Header logo draw error:', error);
+    }
+  }
+
   doc.fillColor('#D1D5DB')
     .font('Helvetica')
     .fontSize(10)
-    .text(formatDate(report.scannedAt), doc.page.width - 170, 60, {
-      width: 100,
+    .text(formatDate(report.scannedAt), doc.page.width - 210, 60, {
+      width: 70,
       align: 'right'
     });
 
@@ -507,7 +735,7 @@ function drawHeaderBar(doc, report) {
 }
 
 function drawOverviewSection(doc, report) {
-  sectionTitle(doc, 'Page Overview', 'Core metadata and positioning');
+  sectionTitle(doc, 'Page Overview', 'CORE METADATA');
 
   const leftX = 50;
   const rightX = 310;
@@ -533,7 +761,7 @@ function drawField(doc, label, value, x, y, labelWidth, valueWidth) {
     .fontSize(9)
     .text(label.toUpperCase(), x, y, { width: labelWidth });
 
-  doc.fillColor(COLORS.ink)
+  doc.fillColor(COLORS.text)
     .font('Helvetica')
     .fontSize(10.5)
     .text(safeValue, x, y + 12, {
@@ -545,8 +773,8 @@ function drawField(doc, label, value, x, y, labelWidth, valueWidth) {
 }
 
 function drawMetricsSection(doc, report) {
-  ensureSpace(doc, 120);
-  sectionTitle(doc, 'Detected Elements', 'Quick scan metrics');
+  ensureSpace(doc, 120, report);
+  sectionTitle(doc, 'Detected Elements', 'SCAN METRICS');
 
   const cards = [
     { label: 'Links', value: String(report.linkCount) },
@@ -573,12 +801,11 @@ function drawMetricsSection(doc, report) {
       .fontSize(9)
       .text(card.label.toUpperCase(), x + 16, y + 14);
 
-    doc.fillColor(COLORS.ink)
+    doc.fillColor(COLORS.text)
       .font('Helvetica-Bold')
       .fontSize(22)
       .text(card.value, x + 16, y + 32, {
-        width: cardWidth - 32,
-        align: 'left'
+        width: cardWidth - 32
       });
   });
 
@@ -586,8 +813,8 @@ function drawMetricsSection(doc, report) {
 }
 
 function drawSummaryCards(doc, report) {
-  ensureSpace(doc, 180);
-  sectionTitle(doc, 'What matters most', 'Score + report direction');
+  ensureSpace(doc, 180, report);
+  sectionTitle(doc, 'What matters most', 'ACTION BLOCKS');
 
   const leftX = 50;
   const topY = doc.y;
@@ -601,7 +828,7 @@ function drawSummaryCards(doc, report) {
       x: leftX,
       y: topY,
       w: cardWidth,
-      h: 126,
+      h: 132,
       title: 'Priority Focus',
       tag: 'TOP 3',
       body:
@@ -618,7 +845,7 @@ function drawSummaryCards(doc, report) {
       x: leftX + cardWidth + gap,
       y: topY,
       w: cardWidth,
-      h: 126,
+      h: 132,
       title: 'Business Next Moves',
       tag: 'ACTION',
       body:
@@ -629,7 +856,7 @@ function drawSummaryCards(doc, report) {
     COLORS.success
   );
 
-  doc.y = topY + 146;
+  doc.y = topY + 152;
 }
 
 function drawInfoCard(doc, card, accentColor) {
@@ -637,7 +864,7 @@ function drawInfoCard(doc, card, accentColor) {
   doc.roundedRect(card.x, card.y, card.w, card.h, 16).fill(COLORS.panel);
   doc.restore();
 
-  doc.fillColor(COLORS.ink)
+  doc.fillColor(COLORS.text)
     .font('Helvetica-Bold')
     .fontSize(12)
     .text(card.title, card.x + 18, card.y + 16);
@@ -665,11 +892,12 @@ function drawInfoCard(doc, card, accentColor) {
 }
 
 function drawListSection(doc, title, items, options = {}) {
-  const safeItems = Array.isArray(items) && items.length > 0
-    ? items
-    : ['No data available for this section.'];
+  const safeItems =
+    Array.isArray(items) && items.length > 0
+      ? items
+      : ['No data available for this section.'];
 
-  ensureSpace(doc, 90 + safeItems.length * 26);
+  ensureSpace(doc, 90 + safeItems.length * 28, { scannedAt: new Date().toISOString() });
   sectionTitle(doc, title, options.accentLabel || '');
 
   const x = 50;
@@ -677,7 +905,7 @@ function drawListSection(doc, title, items, options = {}) {
   const w = doc.page.width - 100;
 
   doc.save();
-  doc.roundedRect(x, y, w, 20 + safeItems.length * 28, 16).fill(COLORS.panel);
+  doc.roundedRect(x, y, w, 20 + safeItems.length * 30, 16).fill(COLORS.panel);
   doc.restore();
 
   let currentY = y + 18;
@@ -689,7 +917,7 @@ function drawListSection(doc, title, items, options = {}) {
     doc.circle(x + 18, currentY + 6, 4).fill(bulletColor);
     doc.restore();
 
-    doc.fillColor(COLORS.ink)
+    doc.fillColor(COLORS.text)
       .font('Helvetica')
       .fontSize(10.5)
       .text(`${index + 1}. ${safeString(item)}`, x + 32, currentY - 2, {
@@ -712,22 +940,13 @@ function sectionTitle(doc, title, eyebrow = '') {
     doc.moveDown(0.3);
   }
 
-  doc.fillColor(COLORS.ink)
+  doc.fillColor(COLORS.text)
     .font('Helvetica-Bold')
     .fontSize(16)
     .text(title, 50, doc.y);
 
-  doc.fillColor(COLORS.muted)
-    .font('Helvetica')
-    .fontSize(9.5)
-    .text('', 50, doc.y + 2);
-
-  doc.moveDown(0.6);
+  doc.moveDown(0.7);
 }
-
-/* -------------------------------------------------------------------------- */
-/*                                 PAGINATION                                 */
-/* -------------------------------------------------------------------------- */
 
 function addPageNumbers(doc) {
   const range = doc.bufferedPageRange();
@@ -751,15 +970,15 @@ function addPageNumbers(doc) {
       .fillColor(COLORS.soft)
       .text('Generated by SitePilot', 50, doc.page.height - 36, {
         align: 'left',
-        width: 150
+        width: 160
       });
   }
 }
 
-function ensureSpace(doc, neededHeight) {
+function ensureSpace(doc, neededHeight, report) {
   if (doc.y + neededHeight > doc.page.height - 70) {
     doc.addPage();
-    drawHeaderBar(doc, { scannedAt: new Date().toISOString() });
+    drawHeaderBar(doc, report || { scannedAt: new Date().toISOString() }, null);
   }
 }
 
