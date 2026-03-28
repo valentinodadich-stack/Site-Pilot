@@ -119,7 +119,8 @@ async function loadHistoryFromDatabase() {
       historyBox.innerHTML = `
         <div style="padding:16px; border:1px solid #f3c2c2; background:#fff5f5; border-radius:12px; margin-top:20px;">
           <h3 style="margin-top:0; color:#b42318;">History Error</h3>
-          <p style="margin-bottom:0;">${escapeHtml(data.error || "Failed to load history.")}</p>
+          <p><strong>Error:</strong> ${escapeHtml(data.error || "Failed to load history.")}</p>
+          <p style="margin-bottom:0;"><strong>Details:</strong> ${escapeHtml(data.details || "No details available.")}</p>
         </div>
       `;
       return;
@@ -304,9 +305,7 @@ function attachDownloadPdfButton() {
           errorMessage = errorData.details
             ? `${errorData.error}: ${errorData.details}`
             : (errorData.error || errorMessage);
-        } catch {
-          // ignore
-        }
+        } catch {}
 
         throw new Error(errorMessage);
       }
@@ -336,17 +335,9 @@ function attachFixButtons() {
   const fixMetaBtn = document.getElementById("fixMetaBtn");
   const fixH1Btn = document.getElementById("fixH1Btn");
 
-  if (fixTitleBtn) {
-    fixTitleBtn.addEventListener("click", () => handleFix("title"));
-  }
-
-  if (fixMetaBtn) {
-    fixMetaBtn.addEventListener("click", () => handleFix("meta"));
-  }
-
-  if (fixH1Btn) {
-    fixH1Btn.addEventListener("click", () => handleFix("h1"));
-  }
+  if (fixTitleBtn) fixTitleBtn.addEventListener("click", () => handleFix("title"));
+  if (fixMetaBtn) fixMetaBtn.addEventListener("click", () => handleFix("meta"));
+  if (fixH1Btn) fixH1Btn.addEventListener("click", () => handleFix("h1"));
 }
 
 async function handleFix(type) {
@@ -428,18 +419,13 @@ function attachCopyFixButton(suggestions) {
 
   copyBtn.addEventListener("click", async () => {
     const text = suggestions.map((item, index) => `${index + 1}. ${item}`).join("\n");
-
     try {
       await navigator.clipboard.writeText(text);
       copyBtn.textContent = "Copied!";
-      setTimeout(() => {
-        copyBtn.textContent = "Copy Suggestions";
-      }, 1500);
-    } catch (error) {
+      setTimeout(() => { copyBtn.textContent = "Copy Suggestions"; }, 1500);
+    } catch {
       copyBtn.textContent = "Copy failed";
-      setTimeout(() => {
-        copyBtn.textContent = "Copy Suggestions";
-      }, 1500);
+      setTimeout(() => { copyBtn.textContent = "Copy Suggestions"; }, 1500);
     }
   });
 }
@@ -450,18 +436,13 @@ function attachCopyButton(feedback) {
 
   copyBtn.addEventListener("click", async () => {
     const text = feedback.map((item, index) => `${index + 1}. ${item}`).join("\n");
-
     try {
       await navigator.clipboard.writeText(text);
       copyBtn.textContent = "Copied!";
-      setTimeout(() => {
-        copyBtn.textContent = "Copy Feedback";
-      }, 1500);
-    } catch (error) {
+      setTimeout(() => { copyBtn.textContent = "Copy Feedback"; }, 1500);
+    } catch {
       copyBtn.textContent = "Copy failed";
-      setTimeout(() => {
-        copyBtn.textContent = "Copy Feedback";
-      }, 1500);
+      setTimeout(() => { copyBtn.textContent = "Copy Feedback"; }, 1500);
     }
   });
 }
@@ -473,24 +454,9 @@ function setLoadingState(isLoading) {
 }
 
 function getScoreColor(score) {
-  if (score >= 80) {
-    return {
-      background: "#ecfdf3",
-      text: "#027a48"
-    };
-  }
-
-  if (score >= 50) {
-    return {
-      background: "#fffaeb",
-      text: "#b54708"
-    };
-  }
-
-  return {
-    background: "#fef3f2",
-      text: "#b42318"
-  };
+  if (score >= 80) return { background: "#ecfdf3", text: "#027a48" };
+  if (score >= 50) return { background: "#fffaeb", text: "#b54708" };
+  return { background: "#fef3f2", text: "#b42318" };
 }
 
 function makeSafeFileName(url) {
