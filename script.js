@@ -12,7 +12,7 @@ scanBtn.addEventListener("click", async () => {
   }
 
   statusBox.textContent = "Scanning...";
-  resultBox.textContent = "";
+  resultBox.innerHTML = "";
 
   try {
     const response = await fetch("/api/scan", {
@@ -24,10 +24,45 @@ scanBtn.addEventListener("click", async () => {
     });
 
     const data = await response.json();
-    statusBox.textContent = response.ok ? "Done." : "Something went wrong.";
-    resultBox.textContent = JSON.stringify(data, null, 2);
+
+    if (!response.ok) {
+      statusBox.textContent = "Something went wrong.";
+      resultBox.innerHTML = `<p style="color:red;">${data.error}</p>`;
+      return;
+    }
+
+    statusBox.textContent = "Done.";
+    resultBox.innerHTML = renderResult(data);
+
   } catch (error) {
     statusBox.textContent = "Request failed.";
-    resultBox.textContent = String(error);
+    resultBox.innerHTML = `<p style="color:red;">${error}</p>`;
   }
 });
+
+function renderResult(data) {
+  if (!data) return "";
+
+  return `
+    <div style="margin-top:20px;">
+      <h2>Score: ${data.score}/100</h2>
+
+      <h3>Scan Data</h3>
+      <p><strong>Title:</strong> ${data.scanData.title || "None"}</p>
+      <p><strong>Meta Description:</strong> ${data.scanData.metaDescription || "None"}</p>
+      <p><strong>H1:</strong> ${data.scanData.h1 || "None"}</p>
+
+      <h3>Issues</h3>
+      <ul>
+        ${data.issues.length > 0 
+          ? data.issues.map(issue => `<li>${issue}</li>`).join("") 
+          : "<li>No major issues found</li>"}
+      </ul>
+
+      <h3>Feedback</h3>
+      <ul>
+        ${data.feedback.map(f => `<li>${f}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+}
