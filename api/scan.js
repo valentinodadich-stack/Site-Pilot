@@ -1,3 +1,22 @@
+function cleanAiJsonText(text) {
+  if (!text) return "";
+
+  let cleaned = text.trim();
+
+  cleaned = cleaned.replace(/```json/gi, "");
+  cleaned = cleaned.replace(/```/g, "");
+  cleaned = cleaned.trim();
+
+  const start = cleaned.indexOf("[");
+  const end = cleaned.lastIndexOf("]");
+
+  if (start !== -1 && end !== -1 && end > start) {
+    cleaned = cleaned.slice(start, end + 1);
+  }
+
+  return cleaned.trim();
+}
+
 async function getAiFeedback(scanData, issues, url) {
   const apiKey = process.env.OPENAI_API_KEY;
 
@@ -34,9 +53,9 @@ IMPORTANT:
 - Be very practical and specific
 - Focus on increasing conversions and clarity
 - No generic advice
-
-Return ONLY a JSON array like:
-["...", "...", "..."]
+- Return ONLY a valid JSON array of strings
+- Do not include markdown
+- Do not include code blocks
 `;
 
   try {
@@ -48,17 +67,17 @@ Return ONLY a JSON array like:
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
+        temperature: 0.4,
         messages: [
           {
             role: "system",
-            content: "You are an expert website optimization assistant."
+            content: "You are an expert website optimization assistant. When asked for JSON, return only raw JSON."
           },
           {
             role: "user",
             content: prompt
           }
-        ],
-        temperature: 0.5
+        ]
       })
     });
 
@@ -69,14 +88,22 @@ Return ONLY a JSON array like:
       return ["AI feedback could not be generated."];
     }
 
+    const cleaned = cleanAiJsonText(content);
+
     try {
-      const parsed = JSON.parse(content);
-      if (Array.isArray(parsed)) {
-        return parsed;
+      const parsed = JSON.parse(cleaned);
+
+      if (!Array.isArray(parsed)) {
+        return ["AI returned an unexpected format."];
       }
-      return ["AI returned an unexpected format."];
+
+      return parsed
+        .filter((item) => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 5);
     } catch {
-      return [content];
+      return [cleaned];
     }
   } catch (error) {
     return [`AI request failed: ${error.message}`];
