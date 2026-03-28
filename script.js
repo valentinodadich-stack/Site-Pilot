@@ -17,6 +17,19 @@ urlInput.addEventListener("keydown", (event) => {
   }
 });
 
+async function safeReadJson(response) {
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      error: "Invalid JSON response from server",
+      details: text
+    };
+  }
+}
+
 async function handleScan() {
   const url = urlInput.value.trim();
 
@@ -44,14 +57,15 @@ async function handleScan() {
       body: JSON.stringify({ url })
     });
 
-    const data = await response.json();
+    const data = await safeReadJson(response);
 
     if (!response.ok) {
       statusBox.textContent = "Scan failed.";
       resultBox.innerHTML = `
         <div class="sp-card" style="border:1px solid var(--danger-border); background:var(--danger-bg);">
           <h3 style="margin-top:0; color:var(--danger-text);">Error</h3>
-          <p style="margin-bottom:0; color:var(--text);">${escapeHtml(data.error || "Something went wrong.")}</p>
+          <p><strong>Message:</strong> ${escapeHtml(data.error || "Something went wrong.")}</p>
+          <p style="margin-bottom:0;"><strong>Details:</strong> ${escapeHtml(data.details || "No details available.")}</p>
         </div>
       `;
       return;
@@ -77,7 +91,7 @@ async function handleScan() {
         })
       });
 
-      const saveData = await saveResponse.json();
+      const saveData = await safeReadJson(saveResponse);
 
       if (!saveResponse.ok) {
         saveMessage = `Save failed: ${saveData.error || "Unknown error"}${saveData.details ? " | " + saveData.details : ""}`;
@@ -109,7 +123,7 @@ async function handleScan() {
 async function loadHistoryFromDatabase() {
   try {
     const response = await fetch("/api/history");
-    const data = await response.json();
+    const data = await safeReadJson(response);
 
     if (!response.ok) {
       console.error("Failed to load history:", data);
@@ -359,20 +373,29 @@ function attachDownloadPdfButton() {
         body: JSON.stringify({ data: lastScanData })
       });
 
+      const data = await safeReadJson(response);
+
       if (!response.ok) {
         let errorMessage = "Failed to generate PDF.";
-
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.details
-            ? `${errorData.error}: ${errorData.details}`
-            : (errorData.error || errorMessage);
-        } catch {}
-
+        errorMessage = data.details
+          ? `${data.error}: ${data.details}`
+          : (data.error || errorMessage);
         throw new Error(errorMessage);
       }
 
-      const blob = await response.blob();
+      const pdfResponse = await fetch("/api/pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ data: lastScanData })
+      });
+
+      if (!pdfResponse.ok) {
+        throw new Error("Failed to download PDF.");
+      }
+
+      const blob = await pdfResponse.blob();
       const blobUrl = window.URL.createObjectURL(blob);
 
       const a = document.createElement("a");
@@ -430,7 +453,7 @@ async function handleFix(type) {
       })
     });
 
-    const data = await response.json();
+    const data = await safeReadJson(response);
 
     if (!response.ok) {
       box.innerHTML = `
