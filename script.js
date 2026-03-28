@@ -2,8 +2,19 @@ const urlInput = document.getElementById("urlInput");
 const scanBtn = document.getElementById("scanBtn");
 const statusBox = document.getElementById("status");
 const resultBox = document.getElementById("result");
+const historyBox = document.getElementById("historyBox");
 
-scanBtn.addEventListener("click", async () => {
+let scanHistory = [];
+
+scanBtn.addEventListener("click", handleScan);
+
+urlInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    handleScan();
+  }
+});
+
+async function handleScan() {
   const url = urlInput.value.trim();
 
   if (!url) {
@@ -12,7 +23,13 @@ scanBtn.addEventListener("click", async () => {
     return;
   }
 
-  statusBox.textContent = "Scanning website...";
+  setLoadingState(true);
+  statusBox.innerHTML = `
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span class="spinner"></span>
+      <span>Scanning website...</span>
+    </div>
+  `;
   resultBox.innerHTML = "";
 
   try {
@@ -39,6 +56,10 @@ scanBtn.addEventListener("click", async () => {
 
     statusBox.textContent = "Scan completed.";
     resultBox.innerHTML = renderResult(data);
+
+    addToHistory(data.url, data.score);
+    renderHistory();
+    attachCopyButton(data.feedback || []);
   } catch (error) {
     statusBox.textContent = "Request failed.";
     resultBox.innerHTML = `
@@ -47,8 +68,16 @@ scanBtn.addEventListener("click", async () => {
         <p style="margin-bottom:0;">${escapeHtml(error.message || String(error))}</p>
       </div>
     `;
+  } finally {
+    setLoadingState(false);
   }
-});
+}
+
+function setLoadingState(isLoading) {
+  scanBtn.disabled = isLoading;
+  scanBtn.textContent = isLoading ? "Scanning..." : "Scan Website";
+  urlInput.disabled = isLoading;
+}
 
 function renderResult(data) {
   const scoreColor = getScoreColor(data.score);
@@ -60,7 +89,7 @@ function renderResult(data) {
         <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
           <div>
             <p style="margin:0; font-size:14px; color:#666;">Scanned website</p>
-            <h2 style="margin:6px 0 0 0; font-size:22px;">${escapeHtml(data.url)}</h2>
+            <h2 style="margin:6px 0 0 0; font-size:22px; word-break:break-word;">${escapeHtml(data.url)}</h2>
           </div>
           <div style="
             min-width:120px;
@@ -103,8 +132,13 @@ function renderResult(data) {
 
       <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-          <h3 style="margin:0;">AI Feedback</h3>
-          <span style="font-size:12px; background:#111; color:#fff; padding:6px 10px; border-radius:999px;">AI Powered</span>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <h3 style="margin:0;">AI Feedback</h3>
+            <span style="font-size:12px; background:#111; color:#fff; padding:6px 10px; border-radius:999px;">AI Powered</span>
+          </div>
+          <button id="copyFeedbackBtn" style="padding:10px 14px; font-size:14px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;">
+            Copy Feedback
+          </button>
         </div>
         <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px;">
           ${
@@ -119,6 +153,64 @@ function renderResult(data) {
         </div>
       </div>
 
+    </div>
+  `;
+}
+
+function attachCopyButton(feedback) {
+  const copyBtn = document.getElementById("copyFeedbackBtn");
+  if (!copyBtn) return;
+
+  copyBtn.addEventListener("click", async () => {
+    const text = feedback.map((item, index) => `${index + 1}. ${item}`).join("\n");
+
+    try {
+      await navigator.clipboard.writeText(text);
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Feedback";
+      }, 1500);
+    } catch (error) {
+      copyBtn.textContent = "Copy failed";
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Feedback";
+      }, 1500);
+    }
+  });
+}
+
+function addToHistory(url, score) {
+  scanHistory.unshift({
+    url,
+    score,
+    date: new Date().toLocaleString()
+  });
+
+  if (scanHistory.length > 5) {
+    scanHistory = scanHistory.slice(0, 5);
+  }
+}
+
+function renderHistory() {
+  if (!scanHistory.length) {
+    historyBox.innerHTML = "";
+    return;
+  }
+
+  historyBox.innerHTML = `
+    <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+      <h3 style="margin-top:0;">Recent Scans</h3>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        ${scanHistory.map(item => `
+          <div style="padding:14px 16px; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;">
+            <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+              <strong style="word-break:break-word;">${escapeHtml(item.url)}</strong>
+              <span>${item.score}/100</span>
+            </div>
+            <div style="margin-top:6px; font-size:13px; color:#667085;">${escapeHtml(item.date)}</div>
+          </div>
+        `).join("")}
+      </div>
     </div>
   `;
 }
