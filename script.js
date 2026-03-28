@@ -189,10 +189,15 @@ function attachDownloadPdfButton() {
   if (!pdfBtn) return;
 
   pdfBtn.addEventListener("click", async () => {
-    if (!lastScanData) return;
-
     if (typeof html2pdf === "undefined") {
-      alert("PDF library is not loaded.");
+      alert("PDF library not loaded.");
+      return;
+    }
+
+    const resultElement = document.querySelector("#result");
+
+    if (!resultElement) {
+      alert("No result to export.");
       return;
     }
 
@@ -200,58 +205,71 @@ function attachDownloadPdfButton() {
     pdfBtn.disabled = true;
     pdfBtn.textContent = "Generating PDF...";
 
-    let wrapper = null;
+    let tempPdfWrapper = null;
 
     try {
-      wrapper = document.createElement("div");
-      wrapper.style.position = "absolute";
-      wrapper.style.left = "0";
-      wrapper.style.top = "0";
-      wrapper.style.width = "794px";
-      wrapper.style.background = "#ffffff";
-      wrapper.style.padding = "32px";
-      wrapper.style.fontFamily = "Arial, sans-serif";
-      wrapper.style.color = "#111827";
-      wrapper.style.zIndex = "-1";
-      wrapper.style.opacity = "0.01";
-      wrapper.style.pointerEvents = "none";
-      wrapper.style.boxSizing = "border-box";
-      wrapper.innerHTML = buildPdfMarkup(lastScanData);
+      tempPdfWrapper = document.createElement("div");
+      tempPdfWrapper.style.background = "#ffffff";
+      tempPdfWrapper.style.padding = "24px";
+      tempPdfWrapper.style.color = "#111827";
+      tempPdfWrapper.style.fontFamily = "Arial, sans-serif";
+      tempPdfWrapper.style.width = "900px";
+      tempPdfWrapper.style.position = "absolute";
+      tempPdfWrapper.style.left = "0";
+      tempPdfWrapper.style.top = "0";
+      tempPdfWrapper.style.zIndex = "-1";
+      tempPdfWrapper.style.opacity = "0.01";
+      tempPdfWrapper.style.pointerEvents = "none";
 
-      document.body.appendChild(wrapper);
+      const clonedResult = resultElement.cloneNode(true);
 
-      await waitForNextPaint();
+      const buttons = clonedResult.querySelectorAll("button");
+      buttons.forEach((button) => button.remove());
 
-      const safeDomain = makeSafeFileName(lastScanData.url);
-      const filename = `sitepilot-report-${safeDomain}.pdf`;
+      tempPdfWrapper.innerHTML = `
+        <div style="margin-bottom:24px;">
+          <div style="display:inline-block; padding:6px 10px; font-size:12px; font-weight:700; color:#4338ca; background:#eef2ff; border:1px solid #c7d2fe; border-radius:999px;">
+            SitePilot PDF Report
+          </div>
+          <h1 style="margin:16px 0 8px; font-size:30px;">Website Audit Report</h1>
+          <p style="margin:0; color:#475467;">Generated on ${escapeHtml(new Date().toLocaleString())}</p>
+        </div>
+      `;
+
+      tempPdfWrapper.appendChild(clonedResult);
+      document.body.appendChild(tempPdfWrapper);
+
+      await waitForRender();
+
+      const filename = lastScanData
+        ? `sitepilot-report-${makeSafeFileName(lastScanData.url)}.pdf`
+        : "sitepilot-report.pdf";
 
       const opt = {
-        margin: 0.4,
+        margin: 0.5,
         filename,
-        image: { type: "jpeg", quality: 0.98 },
+        image: { type: "jpeg", quality: 1 },
         html2canvas: {
           scale: 2,
           useCORS: true,
-          backgroundColor: "#ffffff",
-          windowWidth: wrapper.scrollWidth,
-          windowHeight: wrapper.scrollHeight,
-          scrollX: 0,
-          scrollY: 0
+          backgroundColor: "#ffffff"
         },
         jsPDF: {
           unit: "in",
           format: "a4",
           orientation: "portrait"
         },
-        pagebreak: { mode: ["css", "legacy"] }
+        pagebreak: {
+          mode: ["css", "legacy"]
+        }
       };
 
-      await html2pdf().set(opt).from(wrapper).save();
+      await html2pdf().set(opt).from(tempPdfWrapper).save();
     } catch (error) {
-      alert(`PDF generation failed: ${error.message || error}`);
+      alert("PDF failed: " + (error.message || error));
     } finally {
-      if (wrapper && wrapper.parentNode) {
-        wrapper.parentNode.removeChild(wrapper);
+      if (tempPdfWrapper && tempPdfWrapper.parentNode) {
+        tempPdfWrapper.parentNode.removeChild(tempPdfWrapper);
       }
       pdfBtn.disabled = false;
       pdfBtn.textContent = originalText;
@@ -259,67 +277,12 @@ function attachDownloadPdfButton() {
   });
 }
 
-function waitForNextPaint() {
+function waitForRender() {
   return new Promise((resolve) => {
     requestAnimationFrame(() => {
       requestAnimationFrame(resolve);
     });
   });
-}
-
-function buildPdfMarkup(data) {
-  const issuesHtml = data.issues && data.issues.length
-    ? data.issues.map(item => `<li style="margin-bottom:8px;">${escapeHtml(item)}</li>`).join("")
-    : "<li>No major issues found.</li>";
-
-  const feedbackHtml = data.feedback && data.feedback.length
-    ? data.feedback.map(item => `
-        <div style="padding:12px 14px; margin-bottom:10px; border:1px solid #e5e7eb; border-radius:10px; background:#f8fafc;">
-          ${escapeHtml(item)}
-        </div>
-      `).join("")
-    : "<p>No feedback available.</p>";
-
-  return `
-    <div style="font-family:Arial, sans-serif; background:#ffffff;">
-      <div style="margin-bottom:24px;">
-        <div style="display:inline-block; padding:6px 10px; font-size:12px; font-weight:700; color:#4338ca; background:#eef2ff; border:1px solid #c7d2fe; border-radius:999px;">
-          SitePilot PDF Report
-        </div>
-        <h1 style="margin:16px 0 8px; font-size:32px;">Website Audit Report</h1>
-        <p style="margin:0; color:#475467;">Generated on ${escapeHtml(new Date().toLocaleString())}</p>
-      </div>
-
-      <div style="padding:20px; border:1px solid #e5e7eb; border-radius:16px; margin-bottom:20px;">
-        <h2 style="margin-top:0; font-size:22px;">Overview</h2>
-        <p><strong>Website:</strong> ${escapeHtml(data.url)}</p>
-        <p><strong>Score:</strong> ${data.score}/100</p>
-      </div>
-
-      <div style="padding:20px; border:1px solid #e5e7eb; border-radius:16px; margin-bottom:20px;">
-        <h2 style="margin-top:0; font-size:22px;">Scan Data</h2>
-        <p><strong>Title:</strong> ${escapeHtml(data.scanData.title || "None")}</p>
-        <p><strong>Meta Description:</strong> ${escapeHtml(data.scanData.metaDescription || "None")}</p>
-        <p><strong>H1:</strong> ${escapeHtml(data.scanData.h1 || "None")}</p>
-        <p><strong>Links:</strong> ${data.scanData.links}</p>
-        <p><strong>Images:</strong> ${data.scanData.images}</p>
-        <p><strong>Buttons:</strong> ${data.scanData.buttons}</p>
-        <p><strong>CTA Found:</strong> ${escapeHtml(data.scanData.cta || "None")}</p>
-      </div>
-
-      <div style="padding:20px; border:1px solid #e5e7eb; border-radius:16px; margin-bottom:20px; page-break-inside:avoid;">
-        <h2 style="margin-top:0; font-size:22px;">Issues</h2>
-        <ul style="padding-left:20px; margin-bottom:0;">
-          ${issuesHtml}
-        </ul>
-      </div>
-
-      <div style="padding:20px; border:1px solid #e5e7eb; border-radius:16px; margin-bottom:20px;">
-        <h2 style="margin-top:0; font-size:22px;">AI Feedback</h2>
-        ${feedbackHtml}
-      </div>
-    </div>
-  `;
 }
 
 function attachFixButtons() {
