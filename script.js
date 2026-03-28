@@ -59,6 +59,24 @@ async function handleScan() {
 
     lastScanData = data;
 
+    try {
+      await fetch("/api/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          url: data.url,
+          score: data.score,
+          scanData: data.scanData,
+          issues: data.issues,
+          feedback: data.feedback
+        })
+      });
+    } catch (e) {
+      console.error("Save failed", e);
+    }
+
     statusBox.textContent = "Scan completed.";
     resultBox.innerHTML = renderResult(data);
 
@@ -212,9 +230,11 @@ function attachDownloadPdfButton() {
 
         try {
           const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
+          errorMessage = errorData.details
+            ? `${errorData.error}: ${errorData.details}`
+            : (errorData.error || errorMessage);
         } catch {
-          // ignore json parse failure
+          // ignore
         }
 
         throw new Error(errorMessage);
