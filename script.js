@@ -5,6 +5,7 @@ const resultBox = document.getElementById("result");
 const historyBox = document.getElementById("historyBox");
 
 let scanHistory = loadHistory();
+let lastScanData = null;
 
 renderHistory();
 
@@ -56,12 +57,15 @@ async function handleScan() {
       return;
     }
 
+    lastScanData = data;
+
     statusBox.textContent = "Scan completed.";
     resultBox.innerHTML = renderResult(data);
 
     addToHistory(data.url, data.score);
     renderHistory();
     attachCopyButton(data.feedback || []);
+    attachFixButtons();
   } catch (error) {
     statusBox.textContent = "Request failed.";
     resultBox.innerHTML = `
@@ -109,7 +113,15 @@ function renderResult(data) {
       </div>
 
       <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
-        <h3 style="margin-top:0;">Scan Data</h3>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <h3 style="margin-top:0; margin-bottom:0;">Scan Data</h3>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button id="fixTitleBtn" style="padding:10px 12px; font-size:13px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;">Fix Title</button>
+            <button id="fixMetaBtn" style="padding:10px 12px; font-size:13px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;">Fix Meta</button>
+            <button id="fixH1Btn" style="padding:10px 12px; font-size:13px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;">Fix H1</button>
+          </div>
+        </div>
+
         <p><strong>Title:</strong> ${escapeHtml(data.scanData.title || "None")}</p>
         <p><strong>Meta Description:</strong> ${escapeHtml(data.scanData.metaDescription || "None")}</p>
         <p><strong>H1:</strong> ${escapeHtml(data.scanData.h1 || "None")}</p>
@@ -118,6 +130,8 @@ function renderResult(data) {
         <p><strong>Buttons:</strong> ${data.scanData.buttons}</p>
         <p><strong>CTA Found:</strong> ${escapeHtml(data.scanData.cta || "None")}</p>
       </div>
+
+      <div id="fixResultsBox"></div>
 
       <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
         <h3 style="margin-top:0;">Issues</h3>
@@ -157,6 +171,119 @@ function renderResult(data) {
 
     </div>
   `;
+}
+
+function attachFixButtons() {
+  const fixTitleBtn = document.getElementById("fixTitleBtn");
+  const fixMetaBtn = document.getElementById("fixMetaBtn");
+  const fixH1Btn = document.getElementById("fixH1Btn");
+
+  if (fixTitleBtn) {
+    fixTitleBtn.addEventListener("click", () => handleFix("title"));
+  }
+
+  if (fixMetaBtn) {
+    fixMetaBtn.addEventListener("click", () => handleFix("meta"));
+  }
+
+  if (fixH1Btn) {
+    fixH1Btn.addEventListener("click", () => handleFix("h1"));
+  }
+}
+
+async function handleFix(type) {
+  if (!lastScanData) return;
+
+  const box = document.getElementById("fixResultsBox");
+  if (!box) return;
+
+  box.innerHTML = `
+    <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="spinner"></span>
+        <span>Generating AI ${escapeHtml(type)} suggestions...</span>
+      </div>
+    </div>
+  `;
+
+  try {
+    const response = await fetch("/api/fix", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        type,
+        url: lastScanData.url,
+        scanData: lastScanData.scanData
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      box.innerHTML = `
+        <div style="padding:20px; border-radius:16px; background:#fff5f5; border:1px solid #f3c2c2;">
+          <h3 style="margin-top:0; color:#b42318;">Fix Error</h3>
+          <p style="margin-bottom:0;">${escapeHtml(data.error || "Failed to generate suggestions.")}</p>
+        </div>
+      `;
+      return;
+    }
+
+    box.innerHTML = `
+      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <h3 style="margin:0;">AI ${escapeHtml(type.toUpperCase())} Suggestions</h3>
+          <button id="copyFixBtn" style="padding:10px 14px; font-size:14px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;">
+            Copy Suggestions
+          </button>
+        </div>
+        <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px;">
+          ${
+            data.suggestions && data.suggestions.length
+              ? data.suggestions.map(item => `
+                  <div style="padding:14px 16px; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;">
+                    ${escapeHtml(item)}
+                  </div>
+                `).join("")
+              : `<p>No suggestions available.</p>`
+          }
+        </div>
+      </div>
+    `;
+
+    attachCopyFixButton(data.suggestions || []);
+  } catch (error) {
+    box.innerHTML = `
+      <div style="padding:20px; border-radius:16px; background:#fff5f5; border:1px solid #f3c2c2;">
+        <h3 style="margin-top:0; color:#b42318;">Fix Error</h3>
+        <p style="margin-bottom:0;">${escapeHtml(error.message || String(error))}</p>
+      </div>
+    `;
+  }
+}
+
+function attachCopyFixButton(suggestions) {
+  const copyBtn = document.getElementById("copyFixBtn");
+  if (!copyBtn) return;
+
+  copyBtn.addEventListener("click", async () => {
+    const text = suggestions.map((item, index) => `${index + 1}. ${item}`).join("\n");
+
+    try {
+      await navigator.clipboard.writeText(text);
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Suggestions";
+      }, 1500);
+    } catch (error) {
+      copyBtn.textContent = "Copy failed";
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Suggestions";
+      }, 1500);
+    }
+  });
 }
 
 function attachCopyButton(feedback) {
