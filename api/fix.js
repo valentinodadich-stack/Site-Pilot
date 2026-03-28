@@ -1,3 +1,22 @@
+function cleanAiJsonText(text) {
+  if (!text) return "";
+
+  let cleaned = text.trim();
+
+  cleaned = cleaned.replace(/```json/gi, "");
+  cleaned = cleaned.replace(/```/g, "");
+  cleaned = cleaned.trim();
+
+  const start = cleaned.indexOf("[");
+  const end = cleaned.lastIndexOf("]");
+
+  if (start !== -1 && end !== -1 && end > start) {
+    cleaned = cleaned.slice(start, end + 1);
+  }
+
+  return cleaned.trim();
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -29,10 +48,9 @@ Rules:
 - max 60 characters each
 - clear and compelling
 - business-focused
-- no quotation marks around the full answer
-Return ONLY a valid JSON array of strings.
-Do not include markdown.
-Do not include code blocks.
+- Return ONLY a valid JSON array of strings
+- No markdown
+- No code blocks
 `;
     } else if (type === "meta") {
       instruction = `
@@ -41,10 +59,9 @@ Rules:
 - max 155 characters each
 - clear and persuasive
 - encourage clicks
-- no quotation marks around the full answer
-Return ONLY a valid JSON array of strings.
-Do not include markdown.
-Do not include code blocks.
+- Return ONLY a valid JSON array of strings
+- No markdown
+- No code blocks
 `;
     } else if (type === "h1") {
       instruction = `
@@ -53,10 +70,9 @@ Rules:
 - short and clear
 - strong clarity
 - conversion-focused
-- no quotation marks around the full answer
-Return ONLY a valid JSON array of strings.
-Do not include markdown.
-Do not include code blocks.
+- Return ONLY a valid JSON array of strings
+- No markdown
+- No code blocks
 `;
     } else {
       return res.status(400).json({
@@ -91,11 +107,11 @@ ${instruction}
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        temperature: 0.4,
+        temperature: 0.3,
         messages: [
           {
             role: "system",
-            content: "You are an expert website optimization assistant. Always return clean JSON only when asked."
+            content: "You are an expert website optimization assistant. When asked for JSON, return only raw JSON."
           },
           {
             role: "user",
@@ -114,11 +130,7 @@ ${instruction}
       });
     }
 
-    let cleaned = content.trim();
-
-    if (cleaned.startsWith("```")) {
-      cleaned = cleaned.replace(/```json/gi, "").replace(/```/g, "").trim();
-    }
+    const cleaned = cleanAiJsonText(content);
 
     try {
       const parsed = JSON.parse(cleaned);
@@ -130,13 +142,13 @@ ${instruction}
         });
       }
 
-      const safeSuggestions = parsed
+      const suggestions = parsed
         .filter((item) => typeof item === "string")
         .map((item) => item.trim())
         .filter(Boolean)
         .slice(0, 3);
 
-      if (!safeSuggestions.length) {
+      if (!suggestions.length) {
         return res.status(500).json({
           error: "AI returned empty suggestions",
           raw: cleaned
@@ -146,7 +158,7 @@ ${instruction}
       return res.status(200).json({
         success: true,
         type,
-        suggestions: safeSuggestions
+        suggestions
       });
     } catch (error) {
       return res.status(500).json({
