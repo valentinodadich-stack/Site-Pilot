@@ -200,41 +200,70 @@ function attachDownloadPdfButton() {
     pdfBtn.disabled = true;
     pdfBtn.textContent = "Generating PDF...";
 
+    let wrapper = null;
+
     try {
-      const wrapper = document.createElement("div");
-      wrapper.style.position = "fixed";
-      wrapper.style.left = "-99999px";
+      wrapper = document.createElement("div");
+      wrapper.style.position = "absolute";
+      wrapper.style.left = "0";
       wrapper.style.top = "0";
-      wrapper.style.width = "800px";
+      wrapper.style.width = "794px";
       wrapper.style.background = "#ffffff";
       wrapper.style.padding = "32px";
       wrapper.style.fontFamily = "Arial, sans-serif";
       wrapper.style.color = "#111827";
+      wrapper.style.zIndex = "-1";
+      wrapper.style.opacity = "0.01";
+      wrapper.style.pointerEvents = "none";
+      wrapper.style.boxSizing = "border-box";
       wrapper.innerHTML = buildPdfMarkup(lastScanData);
 
       document.body.appendChild(wrapper);
+
+      await waitForNextPaint();
 
       const safeDomain = makeSafeFileName(lastScanData.url);
       const filename = `sitepilot-report-${safeDomain}.pdf`;
 
       const opt = {
-        margin: 0.5,
+        margin: 0.4,
         filename,
         image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          windowWidth: wrapper.scrollWidth,
+          windowHeight: wrapper.scrollHeight,
+          scrollX: 0,
+          scrollY: 0
+        },
+        jsPDF: {
+          unit: "in",
+          format: "a4",
+          orientation: "portrait"
+        },
         pagebreak: { mode: ["css", "legacy"] }
       };
 
       await html2pdf().set(opt).from(wrapper).save();
-
-      document.body.removeChild(wrapper);
     } catch (error) {
       alert(`PDF generation failed: ${error.message || error}`);
     } finally {
+      if (wrapper && wrapper.parentNode) {
+        wrapper.parentNode.removeChild(wrapper);
+      }
       pdfBtn.disabled = false;
       pdfBtn.textContent = originalText;
     }
+  });
+}
+
+function waitForNextPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(resolve);
+    });
   });
 }
 
@@ -252,7 +281,7 @@ function buildPdfMarkup(data) {
     : "<p>No feedback available.</p>";
 
   return `
-    <div style="font-family:Arial, sans-serif;">
+    <div style="font-family:Arial, sans-serif; background:#ffffff;">
       <div style="margin-bottom:24px;">
         <div style="display:inline-block; padding:6px 10px; font-size:12px; font-weight:700; color:#4338ca; background:#eef2ff; border:1px solid #c7d2fe; border-radius:999px;">
           SitePilot PDF Report
