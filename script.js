@@ -59,8 +59,10 @@ async function handleScan() {
 
     lastScanData = data;
 
+    let saveMessage = "";
+
     try {
-      await fetch("/api/save", {
+      const saveResponse = await fetch("/api/save", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -73,11 +75,21 @@ async function handleScan() {
           feedback: data.feedback
         })
       });
+
+      const saveData = await saveResponse.json();
+
+      if (!saveResponse.ok) {
+        saveMessage = `Save failed: ${saveData.error || "Unknown error"}${saveData.details ? " | " + saveData.details : ""}`;
+        console.error("Save failed:", saveData);
+      } else {
+        saveMessage = "Scan saved to database.";
+      }
     } catch (e) {
-      console.error("Save failed", e);
+      saveMessage = `Save request failed: ${e.message || e}`;
+      console.error("Save request failed", e);
     }
 
-    statusBox.textContent = "Scan completed.";
+    statusBox.textContent = `Scan completed. ${saveMessage}`;
     resultBox.innerHTML = renderResult(data);
 
     addToHistory(data.url, data.score);
