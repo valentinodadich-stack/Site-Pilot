@@ -29,8 +29,10 @@ Rules:
 - max 60 characters each
 - clear and compelling
 - business-focused
-- no quotation marks
-Return ONLY a JSON array of strings.
+- no quotation marks around the full answer
+Return ONLY a valid JSON array of strings.
+Do not include markdown.
+Do not include code blocks.
 `;
     } else if (type === "meta") {
       instruction = `
@@ -39,8 +41,10 @@ Rules:
 - max 155 characters each
 - clear and persuasive
 - encourage clicks
-- no quotation marks
-Return ONLY a JSON array of strings.
+- no quotation marks around the full answer
+Return ONLY a valid JSON array of strings.
+Do not include markdown.
+Do not include code blocks.
 `;
     } else if (type === "h1") {
       instruction = `
@@ -49,8 +53,10 @@ Rules:
 - short and clear
 - strong clarity
 - conversion-focused
-- no quotation marks
-Return ONLY a JSON array of strings.
+- no quotation marks around the full answer
+Return ONLY a valid JSON array of strings.
+Do not include markdown.
+Do not include code blocks.
 `;
     } else {
       return res.status(400).json({
@@ -85,11 +91,11 @@ ${instruction}
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        temperature: 0.5,
+        temperature: 0.4,
         messages: [
           {
             role: "system",
-            content: "You are an expert website optimization assistant."
+            content: "You are an expert website optimization assistant. Always return clean JSON only when asked."
           },
           {
             role: "user",
@@ -108,24 +114,44 @@ ${instruction}
       });
     }
 
+    let cleaned = content.trim();
+
+    if (cleaned.startsWith("```")) {
+      cleaned = cleaned.replace(/```json/gi, "").replace(/```/g, "").trim();
+    }
+
     try {
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(cleaned);
 
       if (!Array.isArray(parsed)) {
         return res.status(500).json({
-          error: "AI returned invalid format"
+          error: "AI returned invalid format",
+          raw: cleaned
+        });
+      }
+
+      const safeSuggestions = parsed
+        .filter((item) => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 3);
+
+      if (!safeSuggestions.length) {
+        return res.status(500).json({
+          error: "AI returned empty suggestions",
+          raw: cleaned
         });
       }
 
       return res.status(200).json({
         success: true,
         type,
-        suggestions: parsed
+        suggestions: safeSuggestions
       });
     } catch (error) {
       return res.status(500).json({
         error: "Failed to parse AI response",
-        raw: content
+        raw: cleaned
       });
     }
   } catch (error) {
