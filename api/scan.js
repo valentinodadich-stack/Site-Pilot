@@ -1,315 +1,270 @@
-function cleanAiJsonText(text) {
-  if (!text) return "";
-
-  let cleaned = text.trim();
-
-  cleaned = cleaned.replace(/```json/gi, "");
-  cleaned = cleaned.replace(/```/g, "");
-  cleaned = cleaned.trim();
-
-  const start = cleaned.indexOf("[");
-  const end = cleaned.lastIndexOf("]");
-
-  if (start !== -1 && end !== -1 && end > start) {
-    cleaned = cleaned.slice(start, end + 1);
-  }
-
-  return cleaned.trim();
+:root {
+  --bg: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+  --text: #111827;
+  --muted-text: #667085;
+  --card-bg: rgba(255, 255, 255, 0.88);
+  --subcard-bg: #f8fafc;
+  --border: #e5e7eb;
+  --input-bg: #ffffff;
+  --input-border: #d0d5dd;
+  --button-bg: #111827;
+  --button-text: #ffffff;
+  --button-shadow: 0 10px 24px rgba(17, 24, 39, 0.16);
+  --history-hover: #eef2ff;
+  --badge-bg: #eef2ff;
+  --badge-border: #c7d2fe;
+  --badge-text: #4338ca;
+  --danger-bg: #fff5f5;
+  --danger-border: #f3c2c2;
+  --danger-text: #b42318;
 }
 
-async function getAiFeedback(scanData, issues, url) {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    return [
-      "OpenAI API key is missing.",
-      "Add OPENAI_API_KEY in Vercel Environment Variables.",
-      "After that, AI feedback will work."
-    ];
-  }
-
-  const prompt = `
-You are a senior CRO (conversion rate optimization) and SEO expert.
-
-Analyze this website and give actionable, business-focused advice.
-
-Website: ${url}
-
-Data:
-- Title: ${scanData.title || "None"}
-- Meta: ${scanData.metaDescription || "None"}
-- H1: ${scanData.h1 || "None"}
-- Links: ${scanData.links}
-- Images: ${scanData.images}
-- Buttons: ${scanData.buttons}
-- CTA: ${scanData.cta || "None"}
-
-Issues:
-${issues.length ? issues.map((i) => `- ${i}`).join("\n") : "- None"}
-
-IMPORTANT:
-- Give EXACTLY 5 suggestions
-- Each suggestion must be 1 sentence
-- Be very practical and specific
-- Focus on increasing conversions and clarity
-- No generic advice
-- Return ONLY a valid JSON array of strings
-- Do not include markdown
-- Do not include code blocks
-`;
-
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.4,
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert website optimization assistant. When asked for JSON, return only raw JSON."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ]
-      })
-    });
-
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-
-    if (!content) {
-      return ["AI feedback could not be generated."];
-    }
-
-    const cleaned = cleanAiJsonText(content);
-
-    try {
-      const parsed = JSON.parse(cleaned);
-
-      if (!Array.isArray(parsed)) {
-        return ["AI returned an unexpected format."];
-      }
-
-      return parsed
-        .filter((item) => typeof item === "string")
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .slice(0, 5);
-    } catch {
-      return [cleaned];
-    }
-  } catch (error) {
-    return [`AI request failed: ${error.message}`];
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: linear-gradient(180deg, #0b1220 0%, #111827 100%);
+    --text: #f3f4f6;
+    --muted-text: #9ca3af;
+    --card-bg: rgba(17, 24, 39, 0.92);
+    --subcard-bg: #111827;
+    --border: #374151;
+    --input-bg: #111827;
+    --input-border: #4b5563;
+    --button-bg: #f3f4f6;
+    --button-text: #111827;
+    --button-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+    --history-hover: #1f2937;
+    --badge-bg: #1e1b4b;
+    --badge-border: #4338ca;
+    --badge-text: #c7d2fe;
+    --danger-bg: rgba(127, 29, 29, 0.22);
+    --danger-border: #7f1d1d;
+    --danger-text: #fca5a5;
   }
 }
 
-function decodeHtmlEntities(text) {
-  if (!text) return "";
-
-  return text
-    .replace(/&#8211;/g, "–")
-    .replace(/&#8212;/g, "—")
-    .replace(/&#8230;/g, "…")
-    .replace(/&#8220;/g, '"')
-    .replace(/&#8221;/g, '"')
-    .replace(/&#8216;/g, "'")
-    .replace(/&#8217;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+* {
+  box-sizing: border-box;
 }
 
-function stripTags(text) {
-  return text ? text.replace(/<[^>]+>/g, "").trim() : "";
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
 }
 
-function extractTitle(html) {
-  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return match ? decodeHtmlEntities(stripTags(match[1])) : "";
+.container {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 48px 20px 80px;
 }
 
-function extractMetaDescription(html) {
-  const match = html.match(
-    /<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i
-  );
-  return match ? decodeHtmlEntities(match[1].trim()) : "";
+.hero-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(8px);
 }
 
-function extractH1(html) {
-  const match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-  return match ? decodeHtmlEntities(stripTags(match[1])) : "";
+.badge {
+  display: inline-block;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--badge-text);
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-border);
+  border-radius: 999px;
 }
 
-function countLinks(html) {
-  const matches = html.match(/<a\b[^>]*>/gi);
-  return matches ? matches.length : 0;
+h1 {
+  margin: 0 0 12px 0;
+  font-size: 42px;
+  line-height: 1.1;
+  font-weight: 800;
+  color: var(--text);
 }
 
-function countImages(html) {
-  const matches = html.match(/<img\b[^>]*>/gi);
-  return matches ? matches.length : 0;
+h2, h3, p, strong, span, li {
+  color: inherit;
 }
 
-function countButtons(html) {
-  const buttonTags = html.match(/<button\b[^>]*>/gi) || [];
-  const inputButtons =
-    html.match(/<input\b[^>]*type=["']?(submit|button)["']?[^>]*>/gi) || [];
-  return buttonTags.length + inputButtons.length;
+.subtext {
+  max-width: 700px;
+  margin: 0;
+  font-size: 16px;
+  color: var(--muted-text);
 }
 
-function findCTA(html) {
-  const ctaWords = [
-    "buy now",
-    "shop now",
-    "get started",
-    "sign up",
-    "subscribe",
-    "book now",
-    "contact us",
-    "learn more",
-    "start now",
-    "try now"
-  ];
+.scan-box {
+  display: flex;
+  gap: 12px;
+  margin: 28px 0 20px;
+  flex-wrap: wrap;
+}
 
-  const cleanHtml = html.toLowerCase();
+input {
+  flex: 1;
+  min-width: 260px;
+  padding: 14px 16px;
+  font-size: 16px;
+  border: 1px solid var(--input-border);
+  border-radius: 14px;
+  outline: none;
+  background: var(--input-bg);
+  color: var(--text);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
 
-  for (const word of ctaWords) {
-    if (cleanHtml.includes(word)) {
-      return word;
-    }
+input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
+
+button {
+  padding: 14px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  border-radius: 14px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  box-shadow: var(--button-shadow);
+}
+
+button:hover {
+  opacity: 0.96;
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+button:disabled,
+input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+#status {
+  min-height: 24px;
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--muted-text);
+}
+
+.result {
+  margin-top: 20px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--input-border);
+  border-top: 2px solid var(--text);
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+}
+
+.sp-card {
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+  color: var(--text);
+}
+
+.sp-subcard {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--subcard-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.sp-button-secondary {
+  padding: 10px 14px;
+  font-size: 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  cursor: pointer;
+}
+
+.sp-pill {
+  font-size: 12px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+.sp-history-item {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--subcard-bg);
+  border: 1px solid var(--border);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text);
+  width: 100%;
+  box-shadow: none;
+}
+
+.sp-history-item:hover {
+  background: var(--history-hover);
+  transform: translateY(0);
+  opacity: 1;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .container {
+    padding: 28px 16px 48px;
   }
 
-  return "";
-}
-
-function buildIssues(scanData) {
-  const issues = [];
-
-  if (!scanData.title) {
-    issues.push("Missing page title");
-  } else if (scanData.title.length < 20) {
-    issues.push("Title is too short");
+  h1 {
+    font-size: 32px;
   }
 
-  if (!scanData.metaDescription) {
-    issues.push("Missing meta description");
-  } else if (scanData.metaDescription.length < 50) {
-    issues.push("Meta description is too short");
+  .hero-card {
+    padding: 22px;
+    border-radius: 18px;
   }
 
-  if (!scanData.h1) {
-    issues.push("Missing H1 heading");
+  .scan-box {
+    flex-direction: column;
   }
 
-  if (scanData.links < 3) {
-    issues.push("Very few links on the page");
+  button {
+    width: 100%;
   }
 
-  if (scanData.images === 0) {
-    issues.push("No images found");
+  .sp-button-secondary {
+    width: auto;
   }
 
-  if (scanData.buttons === 0) {
-    issues.push("No buttons found");
-  }
-
-  if (!scanData.cta) {
-    issues.push("No clear CTA text found");
-  }
-
-  return issues;
-}
-
-function buildScore(scanData) {
-  let score = 100;
-
-  if (!scanData.title) score -= 20;
-  else if (scanData.title.length < 20) score -= 8;
-
-  if (!scanData.metaDescription) score -= 20;
-  else if (scanData.metaDescription.length < 50) score -= 8;
-
-  if (!scanData.h1) score -= 15;
-  if (scanData.links < 3) score -= 8;
-  if (scanData.images === 0) score -= 8;
-  if (scanData.buttons === 0) score -= 8;
-  if (!scanData.cta) score -= 13;
-
-  if (score < 0) score = 0;
-  return score;
-}
-
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  try {
-    const { url } = req.body;
-
-    if (!url) {
-      return res.status(400).json({ error: "URL is required" });
-    }
-
-    let normalizedUrl = url.trim();
-
-    if (
-      !normalizedUrl.startsWith("http://") &&
-      !normalizedUrl.startsWith("https://")
-    ) {
-      normalizedUrl = `https://${normalizedUrl}`;
-    }
-
-    const response = await fetch(normalizedUrl, {
-      headers: {
-        "User-Agent": "SitePilotBot/1.0"
-      }
-    });
-
-    if (!response.ok) {
-      return res.status(400).json({
-        error: "Could not fetch website",
-        status: response.status
-      });
-    }
-
-    const html = await response.text();
-
-    const scanData = {
-      title: extractTitle(html),
-      metaDescription: extractMetaDescription(html),
-      h1: extractH1(html),
-      links: countLinks(html),
-      images: countImages(html),
-      buttons: countButtons(html),
-      cta: findCTA(html)
-    };
-
-    const issues = buildIssues(scanData);
-    const score = buildScore(scanData);
-    const feedback = await getAiFeedback(scanData, issues, normalizedUrl);
-
-    return res.status(200).json({
-      success: true,
-      url: normalizedUrl,
-      score,
-      scanData,
-      issues,
-      feedback
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: "Scan failed",
-      details: error.message
-    });
+  .sp-history-item {
+    width: 100%;
   }
 }
