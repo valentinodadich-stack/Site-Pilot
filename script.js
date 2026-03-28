@@ -4,10 +4,10 @@ const statusBox = document.getElementById("status");
 const resultBox = document.getElementById("result");
 const historyBox = document.getElementById("historyBox");
 
-let scanHistory = loadHistory();
+let scanHistory = [];
 let lastScanData = null;
 
-renderHistory();
+loadHistoryFromDatabase();
 
 scanBtn.addEventListener("click", handleScan);
 
@@ -83,6 +83,7 @@ async function handleScan() {
         console.error("Save failed:", saveData);
       } else {
         saveMessage = "Scan saved to database.";
+        await loadHistoryFromDatabase();
       }
     } catch (e) {
       saveMessage = `Save request failed: ${e.message || e}`;
@@ -92,8 +93,6 @@ async function handleScan() {
     statusBox.textContent = `Scan completed. ${saveMessage}`;
     resultBox.innerHTML = renderResult(data);
 
-    addToHistory(data.url, data.score);
-    renderHistory();
     attachCopyButton(data.feedback || []);
     attachFixButtons();
     attachDownloadPdfButton();
@@ -107,6 +106,35 @@ async function handleScan() {
     `;
   } finally {
     setLoadingState(false);
+  }
+}
+
+async function loadHistoryFromDatabase() {
+  try {
+    const response = await fetch("/api/history");
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Failed to load history:", data);
+      historyBox.innerHTML = `
+        <div style="padding:16px; border:1px solid #f3c2c2; background:#fff5f5; border-radius:12px; margin-top:20px;">
+          <h3 style="margin-top:0; color:#b42318;">History Error</h3>
+          <p style="margin-bottom:0;">${escapeHtml(data.error || "Failed to load history.")}</p>
+        </div>
+      `;
+      return;
+    }
+
+    scanHistory = Array.isArray(data.history) ? data.history : [];
+    renderHistory();
+  } catch (error) {
+    console.error("History request failed:", error);
+    historyBox.innerHTML = `
+      <div style="padding:16px; border:1px solid #f3c2c2; background:#fff5f5; border-radius:12px; margin-top:20px;">
+        <h3 style="margin-top:0; color:#b42318;">History Error</h3>
+        <p style="margin-bottom:0;">${escapeHtml(error.message || String(error))}</p>
+      </div>
+    `;
   }
 }
 
@@ -210,6 +238,37 @@ function renderResult(data) {
         </div>
       </div>
 
+    </div>
+  `;
+}
+
+function renderHistory() {
+  if (!scanHistory.length) {
+    historyBox.innerHTML = `
+      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06); margin-top:24px;">
+        <h3 style="margin-top:0;">Recent Scans</h3>
+        <p style="margin-bottom:0;">No scans saved yet.</p>
+      </div>
+    `;
+    return;
+  }
+
+  historyBox.innerHTML = `
+    <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06); margin-top:24px;">
+      <h3 style="margin-top:0;">Recent Scans (Database)</h3>
+      <div style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
+        ${scanHistory.map(item => `
+          <div style="padding:14px 16px; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;">
+            <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+              <strong style="word-break:break-word;">${escapeHtml(item.url || "Unknown")}</strong>
+              <span>${item.score ?? "N/A"}/100</span>
+            </div>
+            <div style="margin-top:6px; font-size:13px; color:#667085;">
+              ${escapeHtml(item.created_at || "")}
+            </div>
+          </div>
+        `).join("")}
+      </div>
     </div>
   `;
 }
@@ -407,73 +466,10 @@ function attachCopyButton(feedback) {
   });
 }
 
-function addToHistory(url, score) {
-  scanHistory = scanHistory.filter((item) => item.url !== url);
-
-  scanHistory.unshift({
-    url,
-    score,
-    date: new Date().toLocaleString()
-  });
-
-  if (scanHistory.length > 5) {
-    scanHistory = scanHistory.slice(0, 5);
-  }
-
-  saveHistory();
-}
-
-function renderHistory() {
-  if (!scanHistory.length) {
-    historyBox.innerHTML = "";
-    return;
-  }
-
-  historyBox.innerHTML = `
-    <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-        <h3 style="margin-top:0; margin-bottom:0;">Recent Scans</h3>
-        <button id="clearHistoryBtn" style="padding:8px 12px; font-size:13px; border:none; border-radius:10px; background:#ef4444; color:#fff; cursor:pointer;">
-          Clear History
-        </button>
-      </div>
-      <div style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
-        ${scanHistory.map(item => `
-          <div style="padding:14px 16px; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;">
-            <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-              <strong style="word-break:break-word;">${escapeHtml(item.url)}</strong>
-              <span>${item.score}/100</span>
-            </div>
-            <div style="margin-top:6px; font-size:13px; color:#667085;">${escapeHtml(item.date)}</div>
-          </div>
-        `).join("")}
-      </div>
-    </div>
-  `;
-
-  const clearBtn = document.getElementById("clearHistoryBtn");
-  if (clearBtn) {
-    clearBtn.addEventListener("click", clearHistory);
-  }
-}
-
-function saveHistory() {
-  localStorage.setItem("sitepilot_scan_history", JSON.stringify(scanHistory));
-}
-
-function loadHistory() {
-  try {
-    const saved = localStorage.getItem("sitepilot_scan_history");
-    return saved ? JSON.parse(saved) : [];
-  } catch {
-    return [];
-  }
-}
-
-function clearHistory() {
-  scanHistory = [];
-  localStorage.removeItem("sitepilot_scan_history");
-  renderHistory();
+function setLoadingState(isLoading) {
+  scanBtn.disabled = isLoading;
+  scanBtn.textContent = isLoading ? "Scanning..." : "Scan Website";
+  urlInput.disabled = isLoading;
 }
 
 function getScoreColor(score) {
@@ -493,7 +489,7 @@ function getScoreColor(score) {
 
   return {
     background: "#fef3f2",
-    text: "#b42318"
+      text: "#b42318"
   };
 }
 
