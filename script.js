@@ -183,13 +183,18 @@ function renderResult(data) {
     </div>
   `;
 }
+
 function attachDownloadPdfButton() {
   const pdfBtn = document.getElementById("downloadPdfBtn");
   if (!pdfBtn) return;
 
   pdfBtn.addEventListener("click", async () => {
-    if (!lastScanData) return;
+    if (!lastScanData) {
+      alert("No scan data available.");
+      return;
+    }
 
+    const originalText = pdfBtn.textContent;
     pdfBtn.disabled = true;
     pdfBtn.textContent = "Generating PDF...";
 
@@ -202,20 +207,278 @@ function attachDownloadPdfButton() {
         body: JSON.stringify({ data: lastScanData })
       });
 
+      if (!response.ok) {
+        let errorMessage = "Failed to generate PDF.";
+
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // ignore json parse failure
+        }
+
+        throw new Error(errorMessage);
+      }
+
       const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
 
-      const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = "sitepilot-report.pdf";
+      a.href = blobUrl;
+      a.download = `sitepilot-report-${makeSafeFileName(lastScanData.url)}.pdf`;
+      document.body.appendChild(a);
       a.click();
+      a.remove();
 
-      window.URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
-      alert("PDF failed: " + error.message);
+      alert("PDF failed: " + (error.message || String(error)));
     } finally {
       pdfBtn.disabled = false;
-      pdfBtn.textContent = "Download PDF";
+      pdfBtn.textContent = originalText;
     }
   });
+}
+
+function attachFixButtons() {
+  const fixTitleBtn = document.getElementById("fixTitleBtn");
+  const fixMetaBtn = document.getElementById("fixMetaBtn");
+  const fixH1Btn = document.getElementById("fixH1Btn");
+
+  if (fixTitleBtn) {
+    fixTitleBtn.addEventListener("click", () => handleFix("title"));
+  }
+
+  if (fixMetaBtn) {
+    fixMetaBtn.addEventListener("click", () => handleFix("meta"));
+  }
+
+  if (fixH1Btn) {
+    fixH1Btn.addEventListener("click", () => handleFix("h1"));
+  }
+}
+
+async function handleFix(type) {
+  if (!lastScanData) return;
+
+  const box = document.getElementById("fixResultsBox");
+  if (!box) return;
+
+  box.innerHTML = `
+    <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="spinner"></span>
+        <span>Generating AI ${escapeHtml(type)} suggestions...</span>
+      </div>
+    </div>
+  `;
+
+  try {
+    const response = await fetch("/api/fix", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        type,
+        url: lastScanData.url,
+        scanData: lastScanData.scanData
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      box.innerHTML = `
+        <div style="padding:20px; border-radius:16px; background:#fff5f5; border:1px solid #f3c2c2;">
+          <h3 style="margin-top:0; color:#b42318;">Fix Error</h3>
+          <p style="margin-bottom:0;">${escapeHtml(data.error || "Failed to generate suggestions.")}</p>
+        </div>
+      `;
+      return;
+    }
+
+    box.innerHTML = `
+      <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <h3 style="margin:0;">AI ${escapeHtml(type.toUpperCase())} Suggestions</h3>
+          <button id="copyFixBtn" style="padding:10px 14px; font-size:14px; border:none; border-radius:10px; background:#111827; color:#fff; cursor:pointer;">
+            Copy Suggestions
+          </button>
+        </div>
+        <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px;">
+          ${
+            data.suggestions && data.suggestions.length
+              ? data.suggestions.map(item => `
+                  <div style="padding:14px 16px; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;">
+                    ${escapeHtml(item)}
+                  </div>
+                `).join("")
+              : `<p>No suggestions available.</p>`
+          }
+        </div>
+      </div>
+    `;
+
+    attachCopyFixButton(data.suggestions || []);
+  } catch (error) {
+    box.innerHTML = `
+      <div style="padding:20px; border-radius:16px; background:#fff5f5; border:1px solid #f3c2c2;">
+        <h3 style="margin-top:0; color:#b42318;">Fix Error</h3>
+        <p style="margin-bottom:0;">${escapeHtml(error.message || String(error))}</p>
+      </div>
+    `;
+  }
+}
+
+function attachCopyFixButton(suggestions) {
+  const copyBtn = document.getElementById("copyFixBtn");
+  if (!copyBtn) return;
+
+  copyBtn.addEventListener("click", async () => {
+    const text = suggestions.map((item, index) => `${index + 1}. ${item}`).join("\n");
+
+    try {
+      await navigator.clipboard.writeText(text);
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Suggestions";
+      }, 1500);
+    } catch (error) {
+      copyBtn.textContent = "Copy failed";
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Suggestions";
+      }, 1500);
+    }
+  });
+}
+
+function attachCopyButton(feedback) {
+  const copyBtn = document.getElementById("copyFeedbackBtn");
+  if (!copyBtn) return;
+
+  copyBtn.addEventListener("click", async () => {
+    const text = feedback.map((item, index) => `${index + 1}. ${item}`).join("\n");
+
+    try {
+      await navigator.clipboard.writeText(text);
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Feedback";
+      }, 1500);
+    } catch (error) {
+      copyBtn.textContent = "Copy failed";
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Feedback";
+      }, 1500);
+    }
+  });
+}
+
+function addToHistory(url, score) {
+  scanHistory = scanHistory.filter((item) => item.url !== url);
+
+  scanHistory.unshift({
+    url,
+    score,
+    date: new Date().toLocaleString()
+  });
+
+  if (scanHistory.length > 5) {
+    scanHistory = scanHistory.slice(0, 5);
+  }
+
+  saveHistory();
+}
+
+function renderHistory() {
+  if (!scanHistory.length) {
+    historyBox.innerHTML = "";
+    return;
+  }
+
+  historyBox.innerHTML = `
+    <div style="padding:20px; border-radius:16px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 6px 20px rgba(0,0,0,0.06);">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <h3 style="margin-top:0; margin-bottom:0;">Recent Scans</h3>
+        <button id="clearHistoryBtn" style="padding:8px 12px; font-size:13px; border:none; border-radius:10px; background:#ef4444; color:#fff; cursor:pointer;">
+          Clear History
+        </button>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
+        ${scanHistory.map(item => `
+          <div style="padding:14px 16px; border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;">
+            <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+              <strong style="word-break:break-word;">${escapeHtml(item.url)}</strong>
+              <span>${item.score}/100</span>
+            </div>
+            <div style="margin-top:6px; font-size:13px; color:#667085;">${escapeHtml(item.date)}</div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+
+  const clearBtn = document.getElementById("clearHistoryBtn");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", clearHistory);
+  }
+}
+
+function saveHistory() {
+  localStorage.setItem("sitepilot_scan_history", JSON.stringify(scanHistory));
+}
+
+function loadHistory() {
+  try {
+    const saved = localStorage.getItem("sitepilot_scan_history");
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function clearHistory() {
+  scanHistory = [];
+  localStorage.removeItem("sitepilot_scan_history");
+  renderHistory();
+}
+
+function getScoreColor(score) {
+  if (score >= 80) {
+    return {
+      background: "#ecfdf3",
+      text: "#027a48"
+    };
+  }
+
+  if (score >= 50) {
+    return {
+      background: "#fffaeb",
+      text: "#b54708"
+    };
+  }
+
+  return {
+    background: "#fef3f2",
+    text: "#b42318"
+  };
+}
+
+function makeSafeFileName(url) {
+  return String(url)
+    .replace(/^https?:\/\//, "")
+    .replace(/[^a-zA-Z0-9.-]/g, "-")
+    .replace(/-+/g, "-")
+    .toLowerCase()
+    .slice(0, 60);
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
