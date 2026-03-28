@@ -61,17 +61,15 @@ async function handleScan() {
 
     if (!response.ok) {
       statusBox.textContent = "Scan failed.";
-      resultBox.innerHTML = `
-        <div class="sp-card" style="border:1px solid var(--danger-border); background:var(--danger-bg);">
-          <h3 style="margin-top:0; color:var(--danger-text);">Error</h3>
-          <p><strong>Message:</strong> ${escapeHtml(data.error || "Something went wrong.")}</p>
-          <p style="margin-bottom:0;"><strong>Details:</strong> ${escapeHtml(data.details || "No details available.")}</p>
-        </div>
-      `;
+      resultBox.innerHTML = renderErrorCard(
+        "Error",
+        data.error || "Something went wrong.",
+        data.details || "No details available."
+      );
       return;
     }
 
-    lastScanData = data;
+    lastScanData = normalizeScanForApp(data);
 
     let saveMessage = "";
 
@@ -82,12 +80,13 @@ async function handleScan() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          url: data.url,
-          score: data.score,
-          scanData: data.scanData,
-          issues: data.issues,
-          feedback: data.feedback,
-          priorityFixes: data.priorityFixes
+          url: lastScanData.url,
+          score: lastScanData.score,
+          scanData: lastScanData.scanData,
+          issues: lastScanData.issues,
+          feedback: lastScanData.feedback,
+          priorityFixes: lastScanData.priorityFixes,
+          topNextActions: lastScanData.topNextActions
         })
       });
 
@@ -106,15 +105,14 @@ async function handleScan() {
     }
 
     statusBox.textContent = `Scan completed. ${saveMessage}`;
-    renderFullScan(data);
+    renderFullScan(lastScanData);
   } catch (error) {
     statusBox.textContent = "Request failed.";
-    resultBox.innerHTML = `
-      <div class="sp-card" style="border:1px solid var(--danger-border); background:var(--danger-bg);">
-        <h3 style="margin-top:0; color:var(--danger-text);">Error</h3>
-        <p style="margin-bottom:0; color:var(--text);">${escapeHtml(error.message || String(error))}</p>
-      </div>
-    `;
+    resultBox.innerHTML = renderErrorCard(
+      "Error",
+      error.message || String(error),
+      ""
+    );
   } finally {
     setLoadingState(false);
   }
@@ -127,13 +125,10 @@ async function loadHistoryFromDatabase() {
 
     if (!response.ok) {
       console.error("Failed to load history:", data);
-      historyBox.innerHTML = `
-        <div class="sp-card" style="margin-top:20px; border:1px solid var(--danger-border); background:var(--danger-bg);">
-          <h3 style="margin-top:0; color:var(--danger-text);">History Error</h3>
-          <p><strong>Error:</strong> ${escapeHtml(data.error || "Failed to load history.")}</p>
-          <p style="margin-bottom:0;"><strong>Details:</strong> ${escapeHtml(data.details || "No details available.")}</p>
-        </div>
-      `;
+      historyBox.innerHTML = renderHistoryError(
+        data.error || "Failed to load history.",
+        data.details || "No details available."
+      );
       return;
     }
 
@@ -141,27 +136,106 @@ async function loadHistoryFromDatabase() {
     renderHistory();
   } catch (error) {
     console.error("History request failed:", error);
-    historyBox.innerHTML = `
-      <div class="sp-card" style="margin-top:20px; border:1px solid var(--danger-border); background:var(--danger-bg);">
-        <h3 style="margin-top:0; color:var(--danger-text);">History Error</h3>
-        <p style="margin-bottom:0;">${escapeHtml(error.message || String(error))}</p>
-      </div>
-    `;
+    historyBox.innerHTML = renderHistoryError(
+      error.message || String(error),
+      ""
+    );
   }
 }
 
 function renderFullScan(data) {
-  resultBox.innerHTML = renderResult(data);
-  attachCopyButton(data.feedback || []);
+  const normalized = normalizeScanForApp(data);
+  lastScanData = normalized;
+
+  renderPremiumResults(normalized);
+  attachCopyButton(normalized.feedback || []);
   attachFixButtons();
   attachDownloadPdfButton();
+}
+
+function renderPremiumResults(data) {
+  const uiPayload = {
+    url: data.url,
+    score: data.score,
+    scanData: {
+      title: data.scanData?.title || "",
+      metaDescription: data.scanData?.metaDescription || "",
+      h1: data.scanData?.h1 || "",
+      links: data.scanData?.links ?? 0,
+      images: data.scanData?.images ?? 0,
+      buttons: data.scanData?.buttons ?? 0,
+      cta: data.scanData?.cta || ""
+    },
+    issues: data.issues || [],
+    feedback: data.feedback || [],
+    priorityFixes: data.priorityFixes || [],
+    topNextActions: data.topNextActions || []
+  };
+
+  if (window.SitePilotResultsUI && typeof window.SitePilotResultsUI.render === "function") {
+    window.SitePilotResultsUI.render(
+      {
+        url: uiPayload.url,
+        score: uiPayload.score,
+        title: uiPayload.scanData.title,
+        metaDescription: uiPayload.scanData.metaDescription,
+        h1: uiPayload.scanData.h1,
+        cta: uiPayload.scanData.cta,
+        linkCount: uiPayload.scanData.links,
+        imageCount: uiPayload.scanData.images,
+        buttonCount: uiPayload.scanData.buttons,
+        issues: uiPayload.issues,
+        aiFeedback: uiPayload.feedback,
+        priorityFixes: uiPayload.priorityFixes,
+        topNextActions: uiPayload.topNextActions
+      },
+      "#result"
+    );
+
+    appendActionBlocks(data);
+    return;
+  }
+
+  resultBox.innerHTML = renderFallbackResult(data);
+}
+
+function appendActionBlocks(data) {
+  const wrapper = document.createElement("div");
+  wrapper.style.display = "grid";
+  wrapper.style.gap = "20px";
+  wrapper.style.marginTop = "20px";
+
+  wrapper.innerHTML = `
+    <article class="sp-card">
+      <div class="sp-card-inner">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <h3 style="margin:0; color:var(--sp-text, var(--text));">Actions</h3>
+            <span class="sp-section-tag accent">Tools</span>
+          </div>
+
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button id="downloadPdfBtn" class="sp-button-secondary">Download PDF</button>
+            <button id="copyFeedbackBtn" class="sp-button-secondary">Copy Feedback</button>
+            <button id="fixTitleBtn" class="sp-button-secondary">Fix Title</button>
+            <button id="fixMetaBtn" class="sp-button-secondary">Fix Meta</button>
+            <button id="fixH1Btn" class="sp-button-secondary">Fix H1</button>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <div id="fixResultsBox"></div>
+  `;
+
+  resultBox.appendChild(wrapper);
 }
 
 function openHistoryScan(index) {
   const item = scanHistory[index];
   if (!item) return;
 
-  const reconstructed = {
+  const reconstructed = normalizeScanForApp({
     url: item.url || "Unknown",
     score: item.score ?? 0,
     scanData: {
@@ -175,8 +249,9 @@ function openHistoryScan(index) {
     },
     issues: Array.isArray(item.data?.issues) ? item.data.issues : [],
     feedback: Array.isArray(item.data?.feedback) ? item.data.feedback : [],
-    priorityFixes: Array.isArray(item.data?.priorityFixes) ? item.data.priorityFixes : []
-  };
+    priorityFixes: Array.isArray(item.data?.priorityFixes) ? item.data.priorityFixes : [],
+    topNextActions: Array.isArray(item.data?.topNextActions) ? item.data.topNextActions : []
+  });
 
   lastScanData = reconstructed;
   urlInput.value = reconstructed.url;
@@ -186,134 +261,14 @@ function openHistoryScan(index) {
   resultBox.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function setLoadingState(isLoading) {
-  scanBtn.disabled = isLoading;
-  scanBtn.textContent = isLoading ? "Scanning..." : "Scan Website";
-  urlInput.disabled = isLoading;
-}
-
-function renderResult(data) {
-  const scoreColor = getScoreColor(data.score);
-
-  return `
-    <div style="display:flex; flex-direction:column; gap:20px; margin-top:20px;">
-      
-      <div class="sp-card">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
-          <div>
-            <p style="margin:0; font-size:14px; color:var(--muted-text);">Scanned website</p>
-            <h2 style="margin:6px 0 0 0; font-size:22px; word-break:break-word; color:var(--text);">${escapeHtml(data.url)}</h2>
-          </div>
-
-          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-            <button id="downloadPdfBtn" class="sp-button-secondary">
-              Download PDF
-            </button>
-
-            <div style="
-              min-width:120px;
-              text-align:center;
-              padding:16px;
-              border-radius:14px;
-              background:${scoreColor.background};
-              color:${scoreColor.text};
-              font-weight:bold;
-              font-size:28px;
-            ">
-              ${data.score}/100
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="sp-card" style="border:1px solid rgba(245,158,11,0.35);">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            <h3 style="margin:0; color:var(--text);">Priority Fixes</h3>
-            <span class="sp-pill">Top 3</span>
-          </div>
-        </div>
-        <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px;">
-          ${
-            data.priorityFixes && data.priorityFixes.length
-              ? data.priorityFixes.map((item, index) => `
-                  <div class="sp-subcard" style="border-left:4px solid #f59e0b;">
-                    <strong style="display:block; margin-bottom:6px; color:var(--text);">Priority ${index + 1}</strong>
-                    <span style="color:var(--text);">${escapeHtml(item)}</span>
-                  </div>
-                `).join("")
-              : `<p>No priority fixes available.</p>`
-          }
-        </div>
-      </div>
-
-      <div class="sp-card">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-          <h3 style="margin-top:0; margin-bottom:0; color:var(--text);">Scan Data</h3>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button id="fixTitleBtn" class="sp-button-secondary">Fix Title</button>
-            <button id="fixMetaBtn" class="sp-button-secondary">Fix Meta</button>
-            <button id="fixH1Btn" class="sp-button-secondary">Fix H1</button>
-          </div>
-        </div>
-
-        <p><strong>Title:</strong> ${escapeHtml(data.scanData.title || "None")}</p>
-        <p><strong>Meta Description:</strong> ${escapeHtml(data.scanData.metaDescription || "None")}</p>
-        <p><strong>H1:</strong> ${escapeHtml(data.scanData.h1 || "None")}</p>
-        <p><strong>Links:</strong> ${data.scanData.links}</p>
-        <p><strong>Images:</strong> ${data.scanData.images}</p>
-        <p><strong>Buttons:</strong> ${data.scanData.buttons}</p>
-        <p><strong>CTA Found:</strong> ${escapeHtml(data.scanData.cta || "None")}</p>
-      </div>
-
-      <div id="fixResultsBox"></div>
-
-      <div class="sp-card">
-        <h3 style="margin-top:0; color:var(--text);">Issues</h3>
-        ${
-          data.issues && data.issues.length
-            ? `<ul style="padding-left:20px; margin-bottom:0;">
-                ${data.issues.map(issue => `
-                  <li style="margin-bottom:10px; color:var(--text);">${escapeHtml(issue)}</li>
-                `).join("")}
-              </ul>`
-            : `<p style="margin-bottom:0;">No major issues found.</p>`
-        }
-      </div>
-
-      <div class="sp-card">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            <h3 style="margin:0; color:var(--text);">AI Feedback</h3>
-            <span class="sp-pill">AI Powered</span>
-          </div>
-          <button id="copyFeedbackBtn" class="sp-button-secondary">
-            Copy Feedback
-          </button>
-        </div>
-        <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px;">
-          ${
-            data.feedback && data.feedback.length
-              ? data.feedback.map(item => `
-                  <div class="sp-subcard">
-                    ${escapeHtml(item)}
-                  </div>
-                `).join("")
-              : `<p>No feedback available.</p>`
-          }
-        </div>
-      </div>
-
-    </div>
-  `;
-}
-
 function renderHistory() {
   if (!scanHistory.length) {
     historyBox.innerHTML = `
       <div class="sp-card" style="margin-top:24px;">
-        <h3 style="margin-top:0; color:var(--text);">Recent Scans</h3>
-        <p style="margin-bottom:0;">No scans saved yet.</p>
+        <div class="sp-card-inner">
+          <h3 style="margin-top:0; color:var(--sp-text, var(--text));">Recent Scans</h3>
+          <p style="margin-bottom:0;">No scans saved yet.</p>
+        </div>
       </div>
     `;
     return;
@@ -321,22 +276,28 @@ function renderHistory() {
 
   historyBox.innerHTML = `
     <div class="sp-card" style="margin-top:24px;">
-      <h3 style="margin-top:0; color:var(--text);">Recent Scans (Database)</h3>
-      <div style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
-        ${scanHistory.map((item, index) => `
-          <button
-            data-history-index="${index}"
-            class="sp-history-item"
-          >
-            <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-              <strong style="word-break:break-word; color:var(--text);">${escapeHtml(item.url || "Unknown")}</strong>
-              <span style="color:var(--text);">${item.score ?? "N/A"}/100</span>
-            </div>
-            <div style="margin-top:6px; font-size:13px; color:var(--muted-text);">
-              ${escapeHtml(item.created_at || "")}
-            </div>
-          </button>
-        `).join("")}
+      <div class="sp-card-inner">
+        <h3 style="margin-top:0; color:var(--sp-text, var(--text));">Recent Scans (Database)</h3>
+        <div style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
+          ${scanHistory
+            .map(
+              (item, index) => `
+                <button
+                  data-history-index="${index}"
+                  class="sp-history-item"
+                >
+                  <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                    <strong style="word-break:break-word; color:var(--text);">${escapeHtml(item.url || "Unknown")}</strong>
+                    <span style="color:var(--text);">${item.score ?? "N/A"}/100</span>
+                  </div>
+                  <div style="margin-top:6px; font-size:13px; color:var(--muted-text);">
+                    ${escapeHtml(item.created_at || "")}
+                  </div>
+                </button>
+              `
+            )
+            .join("")}
+        </div>
       </div>
     </div>
   `;
@@ -365,24 +326,6 @@ function attachDownloadPdfButton() {
     pdfBtn.textContent = "Generating PDF...";
 
     try {
-      const response = await fetch("/api/pdf", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ data: lastScanData })
-      });
-
-      const data = await safeReadJson(response);
-
-      if (!response.ok) {
-        let errorMessage = "Failed to generate PDF.";
-        errorMessage = data.details
-          ? `${data.error}: ${data.details}`
-          : (data.error || errorMessage);
-        throw new Error(errorMessage);
-      }
-
       const pdfResponse = await fetch("/api/pdf", {
         method: "POST",
         headers: {
@@ -392,7 +335,12 @@ function attachDownloadPdfButton() {
       });
 
       if (!pdfResponse.ok) {
-        throw new Error("Failed to download PDF.");
+        const errorData = await safeReadJson(pdfResponse);
+        let errorMessage = "Failed to generate PDF.";
+        errorMessage = errorData.details
+          ? `${errorData.error}: ${errorData.details}`
+          : (errorData.error || errorMessage);
+        throw new Error(errorMessage);
       }
 
       const blob = await pdfResponse.blob();
@@ -433,9 +381,11 @@ async function handleFix(type) {
 
   box.innerHTML = `
     <div class="sp-card">
-      <div style="display:flex; align-items:center; gap:10px;">
-        <span class="spinner"></span>
-        <span>Generating AI ${escapeHtml(type)} suggestions...</span>
+      <div class="sp-card-inner">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="spinner"></span>
+          <span>Generating AI ${escapeHtml(type)} suggestions...</span>
+        </div>
       </div>
     </div>
   `;
@@ -456,45 +406,39 @@ async function handleFix(type) {
     const data = await safeReadJson(response);
 
     if (!response.ok) {
-      box.innerHTML = `
-        <div class="sp-card" style="border:1px solid var(--danger-border); background:var(--danger-bg);">
-          <h3 style="margin-top:0; color:var(--danger-text);">Fix Error</h3>
-          <p style="margin-bottom:0;">${escapeHtml(data.error || "Failed to generate suggestions.")}</p>
-        </div>
-      `;
+      box.innerHTML = renderFixError(data.error || "Failed to generate suggestions.");
       return;
     }
 
     box.innerHTML = `
-      <div class="sp-card">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-          <h3 style="margin:0; color:var(--text);">AI ${escapeHtml(type.toUpperCase())} Suggestions</h3>
-          <button id="copyFixBtn" class="sp-button-secondary">
-            Copy Suggestions
-          </button>
+      <article class="sp-card">
+        <div class="sp-card-inner">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <h3 style="margin:0; color:var(--sp-text, var(--text));">AI ${escapeHtml(type.toUpperCase())} Suggestions</h3>
+            <button id="copyFixBtn" class="sp-button-secondary">Copy Suggestions</button>
+          </div>
+          <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px;">
+            ${
+              data.suggestions && data.suggestions.length
+                ? data.suggestions
+                    .map(
+                      (item) => `
+                        <div class="sp-subcard">
+                          ${escapeHtml(item)}
+                        </div>
+                      `
+                    )
+                    .join("")
+                : `<p>No suggestions available.</p>`
+            }
+          </div>
         </div>
-        <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px;">
-          ${
-            data.suggestions && data.suggestions.length
-              ? data.suggestions.map(item => `
-                  <div class="sp-subcard">
-                    ${escapeHtml(item)}
-                  </div>
-                `).join("")
-              : `<p>No suggestions available.</p>`
-          }
-        </div>
-      </div>
+      </article>
     `;
 
     attachCopyFixButton(data.suggestions || []);
   } catch (error) {
-    box.innerHTML = `
-      <div class="sp-card" style="border:1px solid var(--danger-border); background:var(--danger-bg);">
-        <h3 style="margin-top:0; color:var(--danger-text);">Fix Error</h3>
-        <p style="margin-bottom:0;">${escapeHtml(error.message || String(error))}</p>
-      </div>
-    `;
+    box.innerHTML = renderFixError(error.message || String(error));
   }
 }
 
@@ -507,10 +451,14 @@ function attachCopyFixButton(suggestions) {
     try {
       await navigator.clipboard.writeText(text);
       copyBtn.textContent = "Copied!";
-      setTimeout(() => { copyBtn.textContent = "Copy Suggestions"; }, 1500);
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Suggestions";
+      }, 1500);
     } catch {
       copyBtn.textContent = "Copy failed";
-      setTimeout(() => { copyBtn.textContent = "Copy Suggestions"; }, 1500);
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Suggestions";
+      }, 1500);
     }
   });
 }
@@ -524,12 +472,110 @@ function attachCopyButton(feedback) {
     try {
       await navigator.clipboard.writeText(text);
       copyBtn.textContent = "Copied!";
-      setTimeout(() => { copyBtn.textContent = "Copy Feedback"; }, 1500);
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Feedback";
+      }, 1500);
     } catch {
       copyBtn.textContent = "Copy failed";
-      setTimeout(() => { copyBtn.textContent = "Copy Feedback"; }, 1500);
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Feedback";
+      }, 1500);
     }
   });
+}
+
+function normalizeScanForApp(data) {
+  const source = data?.data || data || {};
+  const scanDataSource = source.scanData || {};
+
+  const normalized = {
+    url: safeString(source.url, "Unknown"),
+    score: clampNumber(safeNumber(source.score, 0), 0, 100),
+    scanData: {
+      title: safeString(scanDataSource.title, ""),
+      metaDescription: safeString(scanDataSource.metaDescription, ""),
+      h1: safeString(scanDataSource.h1, ""),
+      links: safeNumber(scanDataSource.links, 0),
+      images: safeNumber(scanDataSource.images, 0),
+      buttons: safeNumber(scanDataSource.buttons, 0),
+      cta: safeString(scanDataSource.cta, "")
+    },
+    issues: normalizeArray(source.issues),
+    feedback: normalizeArray(source.feedback || source.aiFeedback),
+    priorityFixes: normalizeArray(source.priorityFixes),
+    topNextActions: normalizeArray(source.topNextActions)
+  };
+
+  if (!normalized.topNextActions.length) {
+    normalized.topNextActions = buildTopNextActions(normalized);
+  }
+
+  return normalized;
+}
+
+function buildTopNextActions(data) {
+  const actions = [];
+
+  if (!data.scanData.title || data.scanData.title.length < 20) {
+    actions.push("Rewrite the title to be clearer, more specific and keyword-aligned.");
+  }
+
+  if (!data.scanData.metaDescription || data.scanData.metaDescription.length < 80) {
+    actions.push("Improve the meta description so the search snippet is stronger and more clickable.");
+  }
+
+  if (!data.scanData.h1) {
+    actions.push("Clarify the H1 so visitors instantly understand what the page does.");
+  }
+
+  if (!data.scanData.cta) {
+    actions.push("Add one obvious primary CTA above the fold.");
+  }
+
+  if (data.scanData.images === 0) {
+    actions.push("Add visual proof such as screenshots, examples or trust visuals.");
+  }
+
+  if (data.scanData.links < 5) {
+    actions.push("Strengthen internal linking so the page feels more connected and crawlable.");
+  }
+
+  if (data.scanData.buttons > 0 && data.scanData.buttons < 2) {
+    actions.push("Test stronger CTA placement and more specific button copy.");
+  }
+
+  (data.priorityFixes || []).forEach((item) => {
+    if (actions.length < 5) actions.push(item);
+  });
+
+  const unique = [];
+  const seen = new Set();
+
+  for (const item of actions) {
+    const clean = safeString(item);
+    const key = clean.toLowerCase();
+    if (clean && !seen.has(key)) {
+      seen.add(key);
+      unique.push(clean);
+    }
+    if (unique.length >= 5) break;
+  }
+
+  return unique;
+}
+
+function normalizeArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map((item) => safeString(item)).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
 }
 
 function setLoadingState(isLoading) {
@@ -538,10 +584,19 @@ function setLoadingState(isLoading) {
   urlInput.disabled = isLoading;
 }
 
-function getScoreColor(score) {
-  if (score >= 80) return { background: "rgba(16,185,129,0.15)", text: "#10b981" };
-  if (score >= 50) return { background: "rgba(245,158,11,0.15)", text: "#f59e0b" };
-  return { background: "rgba(239,68,68,0.15)", text: "#ef4444" };
+function safeString(value, fallback = "") {
+  if (value === null || value === undefined) return fallback;
+  const text = String(value).trim();
+  return text || fallback;
+}
+
+function safeNumber(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function makeSafeFileName(url) {
@@ -554,10 +609,110 @@ function makeSafeFileName(url) {
 }
 
 function escapeHtml(text) {
-  return String(text)
+  return String(text ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function renderErrorCard(title, message, details) {
+  return `
+    <div class="sp-card" style="border:1px solid var(--danger-border); background:var(--danger-bg); margin-top:20px;">
+      <div class="sp-card-inner">
+        <h3 style="margin-top:0; color:var(--danger-text);">${escapeHtml(title)}</h3>
+        <p><strong>Message:</strong> ${escapeHtml(message)}</p>
+        ${
+          details
+            ? `<p style="margin-bottom:0;"><strong>Details:</strong> ${escapeHtml(details)}</p>`
+            : ""
+        }
+      </div>
+    </div>
+  `;
+}
+
+function renderHistoryError(message, details) {
+  return `
+    <div class="sp-card" style="margin-top:20px; border:1px solid var(--danger-border); background:var(--danger-bg);">
+      <div class="sp-card-inner">
+        <h3 style="margin-top:0; color:var(--danger-text);">History Error</h3>
+        <p><strong>Error:</strong> ${escapeHtml(message)}</p>
+        ${
+          details
+            ? `<p style="margin-bottom:0;"><strong>Details:</strong> ${escapeHtml(details)}</p>`
+            : ""
+        }
+      </div>
+    </div>
+  `;
+}
+
+function renderFixError(message) {
+  return `
+    <div class="sp-card" style="border:1px solid var(--danger-border); background:var(--danger-bg);">
+      <div class="sp-card-inner">
+        <h3 style="margin-top:0; color:var(--danger-text);">Fix Error</h3>
+        <p style="margin-bottom:0;">${escapeHtml(message)}</p>
+      </div>
+    </div>
+  `;
+}
+
+function renderFallbackResult(data) {
+  return `
+    <div style="display:flex; flex-direction:column; gap:20px; margin-top:20px;">
+      <div class="sp-card">
+        <div class="sp-card-inner">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+            <div>
+              <p style="margin:0; font-size:14px; color:var(--muted-text);">Scanned website</p>
+              <h2 style="margin:6px 0 0 0; font-size:22px; word-break:break-word; color:var(--text);">${escapeHtml(data.url)}</h2>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+              <button id="downloadPdfBtn" class="sp-button-secondary">Download PDF</button>
+
+              <div style="
+                min-width:120px;
+                text-align:center;
+                padding:16px;
+                border-radius:14px;
+                background:rgba(79,70,229,0.12);
+                color:#4f46e5;
+                font-weight:bold;
+                font-size:28px;
+              ">
+                ${data.score}/100
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sp-card">
+        <div class="sp-card-inner">
+          <h3 style="margin-top:0;">Priority Fixes</h3>
+          ${
+            data.priorityFixes && data.priorityFixes.length
+              ? data.priorityFixes.map((item) => `<p>${escapeHtml(item)}</p>`).join("")
+              : `<p>No priority fixes available.</p>`
+          }
+        </div>
+      </div>
+
+      <div class="sp-card">
+        <div class="sp-card-inner">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+            <button id="copyFeedbackBtn" class="sp-button-secondary">Copy Feedback</button>
+            <button id="fixTitleBtn" class="sp-button-secondary">Fix Title</button>
+            <button id="fixMetaBtn" class="sp-button-secondary">Fix Meta</button>
+            <button id="fixH1Btn" class="sp-button-secondary">Fix H1</button>
+          </div>
+          <div id="fixResultsBox"></div>
+        </div>
+      </div>
+    </div>
+  `;
 }
