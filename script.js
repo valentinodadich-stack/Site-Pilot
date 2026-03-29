@@ -1,5 +1,7 @@
 const urlInput = document.getElementById("urlInput");
+const competitorInput = document.getElementById("competitorInput");
 const scanBtn = document.getElementById("scanBtn");
+const compareBtn = document.getElementById("compareBtn");
 const statusBox = document.getElementById("status");
 const resultBox = document.getElementById("result");
 const historyBox = document.getElementById("historyBox");
@@ -10,10 +12,17 @@ let lastScanData = null;
 loadHistoryFromDatabase();
 
 scanBtn.addEventListener("click", handleScan);
+compareBtn.addEventListener("click", handleCompare);
 
 urlInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     handleScan();
+  }
+});
+
+competitorInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    handleCompare();
   }
 });
 
@@ -39,7 +48,7 @@ async function handleScan() {
     return;
   }
 
-  setLoadingState(true);
+  setLoadingState(true, "scan");
   statusBox.innerHTML = `
     <div style="display:flex; align-items:center; gap:10px;">
       <span class="spinner"></span>
@@ -49,26 +58,7 @@ async function handleScan() {
   resultBox.innerHTML = "";
 
   try {
-    const response = await fetch("/api/scan", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ url })
-    });
-
-    const data = await safeReadJson(response);
-
-    if (!response.ok) {
-      statusBox.textContent = "Scan failed.";
-      resultBox.innerHTML = renderErrorCard(
-        "Error",
-        data.error || "Something went wrong.",
-        data.details || "No details available."
-      );
-      return;
-    }
-
+    const data = await runScan(url);
     lastScanData = normalizeScanForApp(data);
 
     let saveMessage = "";
@@ -107,15 +97,88 @@ async function handleScan() {
     statusBox.textContent = `Scan completed. ${saveMessage}`;
     renderFullScan(lastScanData);
   } catch (error) {
-    statusBox.textContent = "Request failed.";
+    statusBox.textContent = "Scan failed.";
     resultBox.innerHTML = renderErrorCard(
       "Error",
       error.message || String(error),
       ""
     );
   } finally {
-    setLoadingState(false);
+    setLoadingState(false, "scan");
   }
+}
+
+async function handleCompare() {
+  const primaryUrl = urlInput.value.trim();
+  const competitorUrl = competitorInput.value.trim();
+
+  if (!primaryUrl || !competitorUrl) {
+    statusBox.textContent = "Enter both your website and competitor website.";
+    resultBox.innerHTML = "";
+    return;
+  }
+
+  if (normalizeUrlForCompare(primaryUrl) === normalizeUrlForCompare(competitorUrl)) {
+    statusBox.textContent = "Your website and competitor website must be different.";
+    resultBox.innerHTML = "";
+    return;
+  }
+
+  setLoadingState(true, "compare");
+  statusBox.innerHTML = `
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span class="spinner"></span>
+      <span>Comparing both websites...</span>
+    </div>
+  `;
+  resultBox.innerHTML = "";
+
+  try {
+    const [primaryRaw, competitorRaw] = await Promise.all([
+      runScan(primaryUrl),
+      runScan(competitorUrl)
+    ]);
+
+    const primary = normalizeScanForApp(primaryRaw);
+    const competitor = normalizeScanForApp(competitorRaw);
+
+    lastScanData = primary;
+
+    const comparison = buildComparison(primary, competitor);
+    renderComparison(primary, competitor, comparison);
+
+    statusBox.textContent = `Comparison completed. ${comparison.winnerLabel}`;
+  } catch (error) {
+    statusBox.textContent = "Comparison failed.";
+    resultBox.innerHTML = renderErrorCard(
+      "Compare Error",
+      error.message || String(error),
+      ""
+    );
+  } finally {
+    setLoadingState(false, "compare");
+  }
+}
+
+async function runScan(url) {
+  const response = await fetch("/api/scan", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ url })
+  });
+
+  const data = await safeReadJson(response);
+
+  if (!response.ok) {
+    const errorMessage = data.details
+      ? `${data.error || "Scan failed"}: ${data.details}`
+      : (data.error || "Scan failed");
+    throw new Error(errorMessage);
+  }
+
+  return data;
 }
 
 async function loadHistoryFromDatabase() {
@@ -154,52 +217,34 @@ function renderFullScan(data) {
 }
 
 function renderPremiumResults(data) {
-  const uiPayload = {
-    url: data.url,
-    score: data.score,
-    scanData: {
-      title: data.scanData?.title || "",
-      metaDescription: data.scanData?.metaDescription || "",
-      h1: data.scanData?.h1 || "",
-      links: data.scanData?.links ?? 0,
-      images: data.scanData?.images ?? 0,
-      buttons: data.scanData?.buttons ?? 0,
-      cta: data.scanData?.cta || ""
-    },
-    issues: data.issues || [],
-    feedback: data.feedback || [],
-    priorityFixes: data.priorityFixes || [],
-    topNextActions: data.topNextActions || []
-  };
-
   if (window.SitePilotResultsUI && typeof window.SitePilotResultsUI.render === "function") {
     window.SitePilotResultsUI.render(
       {
-        url: uiPayload.url,
-        score: uiPayload.score,
-        title: uiPayload.scanData.title,
-        metaDescription: uiPayload.scanData.metaDescription,
-        h1: uiPayload.scanData.h1,
-        cta: uiPayload.scanData.cta,
-        linkCount: uiPayload.scanData.links,
-        imageCount: uiPayload.scanData.images,
-        buttonCount: uiPayload.scanData.buttons,
-        issues: uiPayload.issues,
-        aiFeedback: uiPayload.feedback,
-        priorityFixes: uiPayload.priorityFixes,
-        topNextActions: uiPayload.topNextActions
+        url: data.url,
+        score: data.score,
+        title: data.scanData.title,
+        metaDescription: data.scanData.metaDescription,
+        h1: data.scanData.h1,
+        cta: data.scanData.cta,
+        linkCount: data.scanData.links,
+        imageCount: data.scanData.images,
+        buttonCount: data.scanData.buttons,
+        issues: data.issues,
+        aiFeedback: data.feedback,
+        priorityFixes: data.priorityFixes,
+        topNextActions: data.topNextActions
       },
       "#result"
     );
 
-    appendActionBlocks(data);
+    appendSingleScanActionBlocks();
     return;
   }
 
   resultBox.innerHTML = renderFallbackResult(data);
 }
 
-function appendActionBlocks(data) {
+function appendSingleScanActionBlocks() {
   const wrapper = document.createElement("div");
   wrapper.style.display = "grid";
   wrapper.style.gap = "20px";
@@ -229,6 +274,269 @@ function appendActionBlocks(data) {
   `;
 
   resultBox.appendChild(wrapper);
+}
+
+function renderComparison(primary, competitor, comparison) {
+  resultBox.innerHTML = `
+    <section class="sitepilot-results">
+      <article class="sp-card">
+        <div class="sp-card-inner">
+          <div class="sp-compare-head">
+            <div>
+              <div class="sp-kicker">Competitor Comparison</div>
+              <h2 class="sp-title" style="margin-top:10px;">Score vs Score</h2>
+              <p class="sp-summary">${escapeHtml(comparison.summary)}</p>
+            </div>
+            <div class="sp-compare-badge ${comparison.winnerClass}">
+              ${escapeHtml(comparison.winnerLabel)}
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <section class="sp-compare-score-grid">
+        <article class="sp-card">
+          <div class="sp-card-inner">
+            <div class="sp-compare-site-label">Your Website</div>
+            <div class="sp-compare-site-name">${escapeHtml(getDisplaySiteName(primary.url))}</div>
+            <div class="sp-compare-site-url">${escapeHtml(primary.url)}</div>
+            <div class="sp-compare-score-card">
+              <div class="sp-compare-score-value">${primary.score}</div>
+              <div class="sp-compare-score-denom">/100</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="sp-card">
+          <div class="sp-card-inner">
+            <div class="sp-compare-site-label">Competitor</div>
+            <div class="sp-compare-site-name">${escapeHtml(getDisplaySiteName(competitor.url))}</div>
+            <div class="sp-compare-site-url">${escapeHtml(competitor.url)}</div>
+            <div class="sp-compare-score-card competitor">
+              <div class="sp-compare-score-value">${competitor.score}</div>
+              <div class="sp-compare-score-denom">/100</div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="sp-grid-2">
+        <article class="sp-card">
+          <div class="sp-card-inner">
+            <div class="sp-section-head">
+              <h3 class="sp-section-title">What competitor does better</h3>
+              <span class="sp-section-tag warning">Gap</span>
+            </div>
+            ${renderList(comparison.competitorWins, "warning")}
+          </div>
+        </article>
+
+        <article class="sp-card">
+          <div class="sp-card-inner">
+            <div class="sp-section-head">
+              <h3 class="sp-section-title">What you should fix now</h3>
+              <span class="sp-section-tag danger">Action</span>
+            </div>
+            ${renderList(comparison.mustFix, "danger")}
+          </div>
+        </article>
+      </section>
+
+      <section class="sp-grid-2">
+        <article class="sp-card">
+          <div class="sp-card-inner">
+            <div class="sp-section-head">
+              <h3 class="sp-section-title">Your website</h3>
+              <span class="sp-section-tag accent">Snapshot</span>
+            </div>
+            <div class="sp-meta-table">
+              <div class="sp-meta-row">
+                <div class="sp-meta-label">Title</div>
+                <div class="sp-meta-value">${escapeHtml(primary.scanData.title || "Not found")}</div>
+              </div>
+              <div class="sp-meta-row">
+                <div class="sp-meta-label">Meta</div>
+                <div class="sp-meta-value">${escapeHtml(primary.scanData.metaDescription || "Not found")}</div>
+              </div>
+              <div class="sp-meta-row">
+                <div class="sp-meta-label">H1</div>
+                <div class="sp-meta-value">${escapeHtml(primary.scanData.h1 || "Not found")}</div>
+              </div>
+              <div class="sp-meta-row">
+                <div class="sp-meta-label">CTA</div>
+                <div class="sp-meta-value">${escapeHtml(primary.scanData.cta || "Not detected")}</div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="sp-card">
+          <div class="sp-card-inner">
+            <div class="sp-section-head">
+              <h3 class="sp-section-title">Competitor website</h3>
+              <span class="sp-section-tag success">Benchmark</span>
+            </div>
+            <div class="sp-meta-table">
+              <div class="sp-meta-row">
+                <div class="sp-meta-label">Title</div>
+                <div class="sp-meta-value">${escapeHtml(competitor.scanData.title || "Not found")}</div>
+              </div>
+              <div class="sp-meta-row">
+                <div class="sp-meta-label">Meta</div>
+                <div class="sp-meta-value">${escapeHtml(competitor.scanData.metaDescription || "Not found")}</div>
+              </div>
+              <div class="sp-meta-row">
+                <div class="sp-meta-label">H1</div>
+                <div class="sp-meta-value">${escapeHtml(competitor.scanData.h1 || "Not found")}</div>
+              </div>
+              <div class="sp-meta-row">
+                <div class="sp-meta-label">CTA</div>
+                <div class="sp-meta-value">${escapeHtml(competitor.scanData.cta || "Not detected")}</div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="sp-grid-2">
+        <article class="sp-card">
+          <div class="sp-card-inner">
+            <div class="sp-section-head">
+              <h3 class="sp-section-title">Your priority fixes</h3>
+              <span class="sp-section-tag accent">Improve</span>
+            </div>
+            ${renderList(primary.priorityFixes.slice(0, 3), "")}
+          </div>
+        </article>
+
+        <article class="sp-card">
+          <div class="sp-card-inner">
+            <div class="sp-section-head">
+              <h3 class="sp-section-title">Your top next actions</h3>
+              <span class="sp-section-tag success">Business Focus</span>
+            </div>
+            ${renderList(primary.topNextActions.slice(0, 5), "success")}
+          </div>
+        </article>
+      </section>
+
+      <article class="sp-card">
+        <div class="sp-card-inner">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <h3 style="margin:0; color:var(--sp-text, var(--text));">Actions</h3>
+              <span class="sp-section-tag accent">Your Site</span>
+            </div>
+
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button id="downloadPdfBtn" class="sp-button-secondary">Download PDF</button>
+              <button id="copyFeedbackBtn" class="sp-button-secondary">Copy Feedback</button>
+              <button id="fixTitleBtn" class="sp-button-secondary">Fix Title</button>
+              <button id="fixMetaBtn" class="sp-button-secondary">Fix Meta</button>
+              <button id="fixH1Btn" class="sp-button-secondary">Fix H1</button>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <div id="fixResultsBox"></div>
+    </section>
+  `;
+
+  attachCopyButton(primary.feedback || []);
+  attachFixButtons();
+  attachDownloadPdfButton();
+}
+
+function buildComparison(primary, competitor) {
+  const competitorWins = [];
+  const mustFix = [];
+
+  if (competitor.score > primary.score) {
+    competitorWins.push(
+      `Competitor has a stronger overall page score (${competitor.score} vs ${primary.score}).`
+    );
+  } else if (primary.score > competitor.score) {
+    competitorWins.push(
+      `You already lead on overall score (${primary.score} vs ${competitor.score}), but smaller gaps still matter.`
+    );
+  } else {
+    competitorWins.push("Both websites currently have the same overall score.");
+  }
+
+  if ((competitor.scanData.title || "").length > (primary.scanData.title || "").length) {
+    competitorWins.push("Competitor title looks more developed and likely communicates the offer more clearly.");
+    mustFix.push("Rewrite your page title to be more specific, benefit-driven and keyword-aligned.");
+  }
+
+  if ((competitor.scanData.metaDescription || "").length > (primary.scanData.metaDescription || "").length) {
+    competitorWins.push("Competitor meta description appears more complete and may perform better in search results.");
+    mustFix.push("Improve your meta description so it better explains the value and increases click-through rate.");
+  }
+
+  if (hasContent(competitor.scanData.h1) && !hasContent(primary.scanData.h1)) {
+    competitorWins.push("Competitor has a clearer visible H1 structure.");
+    mustFix.push("Add or improve your H1 so users instantly understand the page purpose.");
+  }
+
+  if (hasContent(competitor.scanData.cta) && !hasContent(primary.scanData.cta)) {
+    competitorWins.push("Competitor has a detected CTA while your page lacks a clear primary CTA.");
+    mustFix.push("Add one clear primary CTA above the fold.");
+  }
+
+  if (competitor.scanData.buttons > primary.scanData.buttons) {
+    competitorWins.push("Competitor uses more button-driven actions, which may guide users more clearly.");
+    mustFix.push("Review CTA placement and add stronger action points on the page.");
+  }
+
+  if (competitor.scanData.images > primary.scanData.images) {
+    competitorWins.push("Competitor uses more visual content, which can improve trust and comprehension.");
+    mustFix.push("Add stronger visual proof like screenshots, examples or trust visuals.");
+  }
+
+  if (competitor.scanData.links > primary.scanData.links) {
+    competitorWins.push("Competitor has a stronger internal link structure.");
+    mustFix.push("Improve internal linking so the page feels more connected and easier to navigate.");
+  }
+
+  (primary.priorityFixes || []).forEach((item) => {
+    if (mustFix.length < 5) mustFix.push(item);
+  });
+
+  const uniqueCompetitorWins = dedupeList(competitorWins).slice(0, 5);
+  const uniqueMustFix = dedupeList(mustFix).slice(0, 5);
+
+  const scoreDiff = primary.score - competitor.score;
+
+  let winnerLabel = "";
+  let winnerClass = "";
+  let summary = "";
+
+  if (scoreDiff > 0) {
+    winnerLabel = `You lead by ${scoreDiff} points`;
+    winnerClass = "success";
+    summary = "Your page currently performs better overall, but the benchmark still shows where you can tighten clarity, metadata and conversion structure.";
+  } else if (scoreDiff < 0) {
+    winnerLabel = `Competitor leads by ${Math.abs(scoreDiff)} points`;
+    winnerClass = "danger";
+    summary = "The competitor currently has the stronger page. This view shows the most obvious gaps you should fix first.";
+  } else {
+    winnerLabel = "Currently tied";
+    winnerClass = "warning";
+    summary = "Both pages are currently tied on score. The comparison below helps you find the next edge.";
+  }
+
+  return {
+    competitorWins: uniqueCompetitorWins.length
+      ? uniqueCompetitorWins
+      : ["No major competitor advantages were detected from the current scan data."],
+    mustFix: uniqueMustFix.length
+      ? uniqueMustFix
+      : ["No urgent fixes detected. Focus on improving messaging, trust and CTA performance."],
+    winnerLabel,
+    winnerClass,
+    summary
+  };
 }
 
 function openHistoryScan(index) {
@@ -548,20 +856,28 @@ function buildTopNextActions(data) {
     if (actions.length < 5) actions.push(item);
   });
 
-  const unique = [];
-  const seen = new Set();
+  return dedupeList(actions).slice(0, 5);
+}
 
-  for (const item of actions) {
-    const clean = safeString(item);
-    const key = clean.toLowerCase();
-    if (clean && !seen.has(key)) {
-      seen.add(key);
-      unique.push(clean);
-    }
-    if (unique.length >= 5) break;
+function renderList(items, toneClass) {
+  if (!items || !items.length) {
+    return '<div class="sp-empty">No items available.</div>';
   }
 
-  return unique;
+  return `
+    <div class="sp-list">
+      ${items
+        .map(
+          (item, index) => `
+            <div class="sp-list-item ${toneClass}">
+              <div class="sp-list-index">${index + 1}</div>
+              <div class="sp-list-text">${escapeHtml(item)}</div>
+            </div>
+          `
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function normalizeArray(value) {
@@ -578,10 +894,54 @@ function normalizeArray(value) {
   return [];
 }
 
-function setLoadingState(isLoading) {
+function dedupeList(items) {
+  const seen = new Set();
+  const result = [];
+
+  for (const item of items) {
+    const clean = safeString(item);
+    const key = clean.toLowerCase();
+
+    if (!clean || seen.has(key)) continue;
+    seen.add(key);
+    result.push(clean);
+  }
+
+  return result;
+}
+
+function hasContent(value) {
+  return safeString(value).length > 0;
+}
+
+function normalizeUrlForCompare(url) {
+  return safeString(url)
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+}
+
+function getDisplaySiteName(url) {
+  const raw = safeString(url);
+  if (!raw) return "Website";
+
+  try {
+    const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    return new URL(normalized).hostname.replace(/^www\./i, "");
+  } catch {
+    return raw.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0] || "Website";
+  }
+}
+
+function setLoadingState(isLoading, mode = "scan") {
   scanBtn.disabled = isLoading;
-  scanBtn.textContent = isLoading ? "Scanning..." : "Scan Website";
+  compareBtn.disabled = isLoading;
   urlInput.disabled = isLoading;
+  competitorInput.disabled = isLoading;
+
+  scanBtn.textContent = isLoading && mode === "scan" ? "Scanning..." : "Scan Website";
+  compareBtn.textContent = isLoading && mode === "compare" ? "Comparing..." : "Compare Websites";
 }
 
 function safeString(value, fallback = "") {
