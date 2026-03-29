@@ -124,6 +124,23 @@ body {
   font-size: 14px;
 }
 
+.dash-logout-btn {
+  min-height: 46px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+}
+
+.dash-logout-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .dash-back-link,
 .dash-back-link:visited {
   margin-top: auto;
