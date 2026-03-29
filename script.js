@@ -134,17 +134,32 @@ async function handleCompare() {
   resultBox.innerHTML = "";
 
   try {
-    const [primaryRaw, competitorRaw] = await Promise.all([
-      runScan(primaryUrl),
-      runScan(competitorUrl)
-    ]);
+    const response = await fetch("/api/compare", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        primaryUrl,
+        competitorUrl
+      })
+    });
 
-    const primary = normalizeScanForApp(primaryRaw);
-    const competitor = normalizeScanForApp(competitorRaw);
+    const data = await safeReadJson(response);
+
+    if (!response.ok) {
+      throw new Error(
+        data.details
+          ? `${data.error || "Comparison failed"}: ${data.details}`
+          : (data.error || "Comparison failed")
+      );
+    }
+
+    const primary = normalizeScanForApp(data.primary);
+    const competitor = normalizeScanForApp(data.competitor);
+    const comparison = normalizeComparison(data.comparison, primary, competitor);
 
     lastScanData = primary;
-
-    const comparison = buildComparison(primary, competitor);
     renderComparison(primary, competitor, comparison);
 
     statusBox.textContent = `Comparison completed. ${comparison.winnerLabel}`;
@@ -284,7 +299,7 @@ function renderComparison(primary, competitor, comparison) {
           <div class="sp-compare-head">
             <div>
               <div class="sp-kicker">Competitor Comparison</div>
-              <h2 class="sp-title" style="margin-top:10px;">Score vs Score</h2>
+              <h2 class="sp-title" style="margin-top:10px;">AI comparison</h2>
               <p class="sp-summary">${escapeHtml(comparison.summary)}</p>
             </div>
             <div class="sp-compare-badge ${comparison.winnerClass}">
@@ -325,7 +340,7 @@ function renderComparison(primary, competitor, comparison) {
           <div class="sp-card-inner">
             <div class="sp-section-head">
               <h3 class="sp-section-title">What competitor does better</h3>
-              <span class="sp-section-tag warning">Gap</span>
+              <span class="sp-section-tag warning">AI Gap</span>
             </div>
             ${renderList(comparison.competitorWins, "warning")}
           </div>
@@ -341,6 +356,16 @@ function renderComparison(primary, competitor, comparison) {
           </div>
         </article>
       </section>
+
+      <article class="sp-card">
+        <div class="sp-card-inner">
+          <div class="sp-section-head">
+            <h3 class="sp-section-title">Standout differences</h3>
+            <span class="sp-section-tag success">AI Insight</span>
+          </div>
+          ${renderList(comparison.standoutDifferences, "success")}
+        </div>
+      </article>
 
       <section class="sp-grid-2">
         <article class="sp-card">
@@ -448,63 +473,87 @@ function renderComparison(primary, competitor, comparison) {
   attachDownloadPdfButton();
 }
 
-function buildComparison(primary, competitor) {
+function normalizeComparison(comparison, primary, competitor) {
+  if (!comparison || typeof comparison !== "object") {
+    return buildComparisonFallback(primary, competitor);
+  }
+
+  const fallback = buildComparisonFallback(primary, competitor);
+
+  return {
+    summary: safeString(comparison.summary, fallback.summary),
+    winnerLabel: safeString(comparison.winnerLabel, fallback.winnerLabel),
+    winnerClass: ["success", "warning", "danger"].includes(comparison.winnerClass)
+      ? comparison.winnerClass
+      : fallback.winnerClass,
+    competitorWins: normalizeArray(comparison.competitorWins).slice(0, 5).length
+      ? normalizeArray(comparison.competitorWins).slice(0, 5)
+      : fallback.competitorWins,
+    mustFix: normalizeArray(comparison.mustFix).slice(0, 5).length
+      ? normalizeArray(comparison.mustFix).slice(0, 5)
+      : fallback.mustFix,
+    standoutDifferences: normalizeArray(comparison.standoutDifferences).slice(0, 4).length
+      ? normalizeArray(comparison.standoutDifferences).slice(0, 4)
+      : fallback.standoutDifferences
+  };
+}
+
+function buildComparisonFallback(primary, competitor) {
   const competitorWins = [];
   const mustFix = [];
+  const standoutDifferences = [];
 
   if (competitor.score > primary.score) {
     competitorWins.push(
-      `Competitor has a stronger overall page score (${competitor.score} vs ${primary.score}).`
+      `${getDisplaySiteName(competitor.url)} has a stronger overall page score (${competitor.score} vs ${primary.score}).`
     );
   } else if (primary.score > competitor.score) {
     competitorWins.push(
-      `You already lead on overall score (${primary.score} vs ${competitor.score}), but smaller gaps still matter.`
+      `${getDisplaySiteName(primary.url)} already leads on overall score (${primary.score} vs ${competitor.score}).`
     );
   } else {
     competitorWins.push("Both websites currently have the same overall score.");
   }
 
   if ((competitor.scanData.title || "").length > (primary.scanData.title || "").length) {
-    competitorWins.push("Competitor title looks more developed and likely communicates the offer more clearly.");
-    mustFix.push("Rewrite your page title to be more specific, benefit-driven and keyword-aligned.");
+    competitorWins.push("Competitor title appears more developed and likely explains the offer more clearly.");
+    mustFix.push("Rewrite your title to be more specific, benefit-driven and keyword-aligned.");
+    standoutDifferences.push("Title depth favors the competitor.");
   }
 
   if ((competitor.scanData.metaDescription || "").length > (primary.scanData.metaDescription || "").length) {
-    competitorWins.push("Competitor meta description appears more complete and may perform better in search results.");
-    mustFix.push("Improve your meta description so it better explains the value and increases click-through rate.");
+    competitorWins.push("Competitor meta description appears more complete for search results.");
+    mustFix.push("Improve your meta description so it better explains value and boosts click-through rate.");
+    standoutDifferences.push("Search snippet quality favors the competitor.");
   }
 
   if (hasContent(competitor.scanData.h1) && !hasContent(primary.scanData.h1)) {
     competitorWins.push("Competitor has a clearer visible H1 structure.");
     mustFix.push("Add or improve your H1 so users instantly understand the page purpose.");
+    standoutDifferences.push("Page hierarchy is clearer on the competitor page.");
   }
 
   if (hasContent(competitor.scanData.cta) && !hasContent(primary.scanData.cta)) {
     competitorWins.push("Competitor has a detected CTA while your page lacks a clear primary CTA.");
     mustFix.push("Add one clear primary CTA above the fold.");
-  }
-
-  if (competitor.scanData.buttons > primary.scanData.buttons) {
-    competitorWins.push("Competitor uses more button-driven actions, which may guide users more clearly.");
-    mustFix.push("Review CTA placement and add stronger action points on the page.");
+    standoutDifferences.push("Competitor provides a more obvious next step.");
   }
 
   if (competitor.scanData.images > primary.scanData.images) {
-    competitorWins.push("Competitor uses more visual content, which can improve trust and comprehension.");
+    competitorWins.push("Competitor uses more visual content, which may improve trust and comprehension.");
     mustFix.push("Add stronger visual proof like screenshots, examples or trust visuals.");
+    standoutDifferences.push("Competitor page is more visually supported.");
   }
 
   if (competitor.scanData.links > primary.scanData.links) {
     competitorWins.push("Competitor has a stronger internal link structure.");
     mustFix.push("Improve internal linking so the page feels more connected and easier to navigate.");
+    standoutDifferences.push("Competitor has better structural linking.");
   }
 
   (primary.priorityFixes || []).forEach((item) => {
     if (mustFix.length < 5) mustFix.push(item);
   });
-
-  const uniqueCompetitorWins = dedupeList(competitorWins).slice(0, 5);
-  const uniqueMustFix = dedupeList(mustFix).slice(0, 5);
 
   const scoreDiff = primary.score - competitor.score;
 
@@ -515,27 +564,30 @@ function buildComparison(primary, competitor) {
   if (scoreDiff > 0) {
     winnerLabel = `You lead by ${scoreDiff} points`;
     winnerClass = "success";
-    summary = "Your page currently performs better overall, but the benchmark still shows where you can tighten clarity, metadata and conversion structure.";
+    summary = "Your page currently performs better overall, but the benchmark still shows where clarity, trust and CTA structure can improve.";
   } else if (scoreDiff < 0) {
     winnerLabel = `Competitor leads by ${Math.abs(scoreDiff)} points`;
     winnerClass = "danger";
-    summary = "The competitor currently has the stronger page. This view shows the most obvious gaps you should fix first.";
+    summary = "The competitor currently has the stronger page. This comparison highlights the most important gaps to close first.";
   } else {
     winnerLabel = "Currently tied";
     winnerClass = "warning";
-    summary = "Both pages are currently tied on score. The comparison below helps you find the next edge.";
+    summary = "Both pages are currently tied on score. Use the differences below to find the next edge.";
   }
 
   return {
-    competitorWins: uniqueCompetitorWins.length
-      ? uniqueCompetitorWins
-      : ["No major competitor advantages were detected from the current scan data."],
-    mustFix: uniqueMustFix.length
-      ? uniqueMustFix
-      : ["No urgent fixes detected. Focus on improving messaging, trust and CTA performance."],
+    summary,
     winnerLabel,
     winnerClass,
-    summary
+    competitorWins: dedupeList(competitorWins).slice(0, 5).length
+      ? dedupeList(competitorWins).slice(0, 5)
+      : ["No major competitor advantages were detected from the current scan data."],
+    mustFix: dedupeList(mustFix).slice(0, 5).length
+      ? dedupeList(mustFix).slice(0, 5)
+      : ["No urgent fixes detected. Focus on improving messaging, trust and CTA performance."],
+    standoutDifferences: dedupeList(standoutDifferences).slice(0, 4).length
+      ? dedupeList(standoutDifferences).slice(0, 4)
+      : ["The two pages look broadly similar from the available scan data."]
   };
 }
 
