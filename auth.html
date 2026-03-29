@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SitePilot Auth</title>
+  <meta
+    name="description"
+    content="Sign up or log in to SitePilot."
+  />
+  <link rel="stylesheet" href="./auth.css" />
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="auth-card">
+      <a href="./index.html" class="auth-back">← Back to landing</a>
+
+      <div class="auth-brand">
+        <div class="auth-brand-mark">SP</div>
+        <div>
+          <h1>SitePilot</h1>
+          <p>AI Website Audit</p>
+        </div>
+      </div>
+
+      <div class="auth-pill">Supabase Auth</div>
+
+      <h2>Create account or log in</h2>
+      <p class="auth-subtext">
+        Access your dashboard, scans, comparisons and reports.
+      </p>
+
+      <div class="auth-form">
+        <label class="auth-label" for="emailInput">Email</label>
+        <input id="emailInput" type="email" placeholder="you@example.com" />
+
+        <label class="auth-label" for="passwordInput">Password</label>
+        <input id="passwordInput" type="password" placeholder="Minimum 6 characters" />
+
+        <div class="auth-actions">
+          <button id="signupBtn" class="auth-btn auth-btn-primary">Sign Up</button>
+          <button id="loginBtn" class="auth-btn auth-btn-secondary">Log In</button>
+        </div>
+      </div>
+
+      <div id="authStatus" class="auth-status"></div>
+
+      <div class="auth-helper">
+        After sign up, check your email for confirmation if your Supabase project requires it.
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./supabase-client.js"></script>
+  <script src="./auth.js"></script>
+</body>
+</html>
