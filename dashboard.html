@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SitePilot Dashboard</title>
+  <meta
+    name="description"
+    content="SitePilot dashboard for website scans, competitor comparison, PDF exports and history."
+  />
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./sitepilot-results.css" />
+  <link rel="stylesheet" href="./dashboard-shell.css" />
+</head>
+<body>
+  <div class="dash-shell">
+    <aside class="dash-sidebar">
+      <div class="dash-brand">
+        <div class="dash-brand-mark">SP</div>
+        <div>
+          <div class="dash-brand-name">SitePilot</div>
+          <div class="dash-brand-sub">AI Website Audit</div>
+        </div>
+      </div>
+
+      <nav class="dash-nav">
+        <a href="#dashboardTop" class="dash-nav-item active">Overview</a>
+        <a href="#scanSection" class="dash-nav-item">New Scan</a>
+        <a href="#compareSection" class="dash-nav-item">Compare</a>
+        <a href="#result" class="dash-nav-item">Results</a>
+        <a href="#historyBox" class="dash-nav-item">History</a>
+      </nav>
+
+      <div class="dash-sidebar-card">
+        <div class="dash-sidebar-label">Current mode</div>
+        <h3>Growth Audit</h3>
+        <p>
+          Scan pages, compare competitors and export polished reports.
+        </p>
+      </div>
+
+      <a href="./index.html" class="dash-back-link">← Back to Landing Page</a>
+    </aside>
+
+    <main class="dash-main" id="dashboardTop">
+      <header class="dash-topbar">
+        <div>
+          <div class="dash-topbar-kicker">Dashboard</div>
+          <h1>Website Performance Workspace</h1>
+          <p>
+            Run scans, compare pages and find the highest-impact improvements faster.
+          </p>
+        </div>
+
+        <div class="dash-topbar-actions">
+          <a href="#scanSection" class="dash-btn dash-btn-primary">Start New Scan</a>
+          <a href="#compareSection" class="dash-btn dash-btn-secondary">Compare Pages</a>
+        </div>
+      </header>
+
+      <section class="dash-stats-grid">
+        <article class="dash-stat-card">
+          <div class="dash-stat-label">Main use case</div>
+          <div class="dash-stat-value">SEO + UX</div>
+          <div class="dash-stat-sub">Find technical and messaging gaps fast</div>
+        </article>
+
+        <article class="dash-stat-card">
+          <div class="dash-stat-label">Core workflow</div>
+          <div class="dash-stat-value">Scan → Fix</div>
+          <div class="dash-stat-sub">Clear actions, no guessing</div>
+        </article>
+
+        <article class="dash-stat-card">
+          <div class="dash-stat-label">Compare mode</div>
+          <div class="dash-stat-value">AI Benchmark</div>
+          <div class="dash-stat-sub">See what competitors do better</div>
+        </article>
+
+        <article class="dash-stat-card">
+          <div class="dash-stat-label">Export</div>
+          <div class="dash-stat-value">Premium PDF</div>
+          <div class="dash-stat-sub">Shareable client-ready output</div>
+        </article>
+      </section>
+
+      <section class="dash-panel-grid">
+        <article class="dash-panel">
+          <div class="dash-panel-head">
+            <div>
+              <div class="dash-panel-kicker">Quick start</div>
+              <h2>Run a new website scan</h2>
+            </div>
+          </div>
+
+          <div class="dash-scan-card" id="scanSection">
+            <label class="dash-label" for="urlInput">Your Website</label>
+            <div class="scan-box dash-scan-box">
+              <input id="urlInput" type="text" placeholder="https://your-site.com" />
+              <button id="scanBtn">Scan Website</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="dash-panel">
+          <div class="dash-panel-head">
+            <div>
+              <div class="dash-panel-kicker">Benchmark</div>
+              <h2>Compare against a competitor</h2>
+            </div>
+          </div>
+
+          <div class="dash-scan-card" id="compareSection">
+            <label class="dash-label" for="competitorInput">Competitor Website</label>
+            <div class="compare-box dash-compare-box">
+              <div class="compare-label">Competitor Comparison</div>
+              <div class="compare-grid">
+                <input id="competitorInput" type="text" placeholder="https://competitor.com" />
+                <button id="compareBtn">Compare Websites</button>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="dash-panel">
+        <div class="dash-panel-head">
+          <div>
+            <div class="dash-panel-kicker">Live status</div>
+            <h2>Scan activity</h2>
+          </div>
+        </div>
+
+        <div id="status" class="dash-status-box"></div>
+      </section>
+
+      <section class="dash-panel">
+        <div class="dash-panel-head">
+          <div>
+            <div class="dash-panel-kicker">Output</div>
+            <h2>Results</h2>
+          </div>
+        </div>
+
+        <div id="result" class="result"></div>
+      </section>
+
+      <section class="dash-panel">
+        <div class="dash-panel-head">
+          <div>
+            <div class="dash-panel-kicker">Saved scans</div>
+            <h2>History</h2>
+          </div>
+        </div>
+
+        <div id="historyBox"></div>
+      </section>
+    </main>
+  </div>
+
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
+    integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg=="
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  ></script>
+  <script src="./sitepilot-results.js"></script>
+  <script src="./script.js"></script>
+</body>
+</html>
