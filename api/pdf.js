@@ -11,11 +11,8 @@ const COLORS = {
   accent: '#4F46E5',
   accentSoft: '#EEF2FF',
   success: '#059669',
-  successSoft: '#ECFDF5',
   warning: '#D97706',
-  warningSoft: '#FFF7ED',
   danger: '#DC2626',
-  dangerSoft: '#FEF2F2',
   dark: '#0B1220'
 };
 
@@ -29,14 +26,12 @@ export default async function handler(req, res) {
     const body = parseBody(req.body);
     const report = normalizePayload(body);
 
-    const branding = await resolveBranding(report.url);
-
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: 56, bottom: 56, left: 50, right: 50 },
       bufferPages: true,
       info: {
-        Title: `SitePilot Report - ${report.url}`,
+        Title: `SitePilot Report - ${report.siteName}`,
         Author: 'SitePilot',
         Subject: 'AI Website Analysis Report',
         Keywords: 'SitePilot, website audit, SEO, UX, conversion, AI',
@@ -49,7 +44,7 @@ export default async function handler(req, res) {
 
     doc.on('end', () => {
       const pdfBuffer = Buffer.concat(chunks);
-      const filename = buildFilename(report.url);
+      const filename = buildFilename(report.siteName);
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -57,7 +52,7 @@ export default async function handler(req, res) {
       res.status(200).end(pdfBuffer);
     });
 
-    await drawReport(doc, report, branding);
+    drawReport(doc, report);
     addPageNumbers(doc);
     doc.end();
   } catch (error) {
@@ -89,6 +84,8 @@ function normalizePayload(body = {}) {
   const source = body.result || body.scan || body.data || body || {};
 
   const url = safeString(body.url || source.url || source.scannedUrl || 'Unknown URL');
+  const siteName = getDisplaySiteName(url);
+
   const scannedAt = safeString(
     body.scannedAt ||
       source.scannedAt ||
@@ -97,16 +94,26 @@ function normalizePayload(body = {}) {
       new Date().toISOString()
   );
 
-  const title = safeString(source.title || source.seoTitle || 'Not found');
+  const title = safeString(source.title || source.seoTitle || source.scanData?.title || 'Not found');
   const metaDescription = safeString(
-    source.metaDescription || source.meta || source.description || 'Not found'
+    source.metaDescription ||
+      source.meta ||
+      source.description ||
+      source.scanData?.metaDescription ||
+      'Not found'
   );
-  const h1 = safeString(source.h1 || source.heading || 'Not found');
-  const cta = safeString(source.cta || source.primaryCta || 'Not detected');
+  const h1 = safeString(source.h1 || source.heading || source.scanData?.h1 || 'Not found');
+  const cta = safeString(source.cta || source.primaryCta || source.scanData?.cta || 'Not detected');
 
-  const linkCount = safeNumber(source.linkCount ?? source.links ?? source.linksCount ?? 0);
-  const imageCount = safeNumber(source.imageCount ?? source.images ?? source.imagesCount ?? 0);
-  const buttonCount = safeNumber(source.buttonCount ?? source.buttons ?? source.buttonsCount ?? 0);
+  const linkCount = safeNumber(
+    source.linkCount ?? source.links ?? source.linksCount ?? source.scanData?.links ?? 0
+  );
+  const imageCount = safeNumber(
+    source.imageCount ?? source.images ?? source.imagesCount ?? source.scanData?.images ?? 0
+  );
+  const buttonCount = safeNumber(
+    source.buttonCount ?? source.buttons ?? source.buttonsCount ?? source.scanData?.buttons ?? 0
+  );
 
   const score = clampNumber(safeNumber(source.score ?? source.totalScore ?? 0), 0, 100);
 
@@ -141,6 +148,7 @@ function normalizePayload(body = {}) {
 
   return {
     url,
+    siteName,
     scannedAt,
     title,
     metaDescription,
@@ -189,15 +197,30 @@ function clampNumber(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function buildFilename(url) {
-  const clean = safeString(url)
-    .replace(/^https?:\/\//i, '')
+function buildFilename(siteName) {
+  const clean = safeString(siteName)
     .replace(/[^a-z0-9.-]/gi, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 60);
 
   return `sitepilot-report-${clean || 'website'}.pdf`;
+}
+
+function getDisplaySiteName(value) {
+  const raw = safeString(value);
+  if (!raw) return 'Website';
+
+  try {
+    const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const hostname = new URL(normalized).hostname.replace(/^www\./i, '');
+    return hostname || raw;
+  } catch {
+    return raw
+      .replace(/^https?:\/\//i, '')
+      .replace(/^www\./i, '')
+      .split('/')[0] || 'Website';
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -306,219 +329,14 @@ function cleanSentence(value) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                              BRANDING / LOGO                               */
-/* -------------------------------------------------------------------------- */
-
-async function resolveBranding(inputUrl) {
-  const fallback = {
-    siteName: hostnameFromUrl(inputUrl),
-    logoBuffer: null,
-    logoMime: null,
-    logoSourceUrl: null
-  };
-
-  try {
-    const normalizedUrl = ensureUrl(inputUrl);
-    if (!normalizedUrl) return fallback;
-
-    const response = await fetch(normalizedUrl, {
-      headers: {
-        'User-Agent': 'SitePilotBot/1.0 (+https://sitepilot.app)'
-      }
-    });
-
-    if (!response.ok) return fallback;
-
-    const html = await response.text();
-    const siteName =
-      extractMetaContent(html, 'property', 'og:site_name') ||
-      extractMetaContent(html, 'name', 'application-name') ||
-      extractTitle(html) ||
-      hostnameFromUrl(normalizedUrl);
-
-    const logoCandidates = extractLogoCandidates(html, normalizedUrl);
-
-    for (const candidateUrl of logoCandidates) {
-      const imageResult = await downloadUsableImage(candidateUrl);
-      if (imageResult) {
-        return {
-          siteName: safeString(siteName),
-          logoBuffer: imageResult.buffer,
-          logoMime: imageResult.mime,
-          logoSourceUrl: candidateUrl
-        };
-      }
-    }
-
-    return {
-      ...fallback,
-      siteName: safeString(siteName)
-    };
-  } catch (error) {
-    console.error('Branding resolve error:', error);
-    return fallback;
-  }
-}
-
-function extractLogoCandidates(html, baseUrl) {
-  const candidates = [];
-
-  const appleTouch = extractLinkHrefByRelContains(html, 'apple-touch-icon');
-  const icon = extractLinkHrefByRelContains(html, 'icon');
-  const shortcutIcon = extractLinkHrefByRelContains(html, 'shortcut icon');
-  const ogImage = extractMetaContent(html, 'property', 'og:image');
-
-  pushCandidate(candidates, appleTouch, baseUrl);
-  pushCandidate(candidates, icon, baseUrl);
-  pushCandidate(candidates, shortcutIcon, baseUrl);
-  pushCandidate(candidates, ogImage, baseUrl);
-
-  return dedupeStrings(
-    candidates.filter((url) => {
-      const lower = url.toLowerCase();
-      if (lower.endsWith('.svg')) return false;
-      if (lower.endsWith('.ico')) return false;
-      return true;
-    })
-  );
-}
-
-function pushCandidate(list, value, baseUrl) {
-  const resolved = absoluteUrl(value, baseUrl);
-  if (resolved) list.push(resolved);
-}
-
-function dedupeStrings(items) {
-  const seen = new Set();
-  const output = [];
-
-  for (const item of items) {
-    const key = safeString(item).toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    output.push(item);
-  }
-
-  return output;
-}
-
-async function downloadUsableImage(url) {
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'SitePilotBot/1.0 (+https://sitepilot.app)'
-      }
-    });
-
-    if (!response.ok) return null;
-
-    const mime = safeString(response.headers.get('content-type')).toLowerCase();
-
-    if (!mime.includes('image/png') && !mime.includes('image/jpeg') && !mime.includes('image/jpg')) {
-      return null;
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    if (!buffer || buffer.length === 0) return null;
-
-    return { buffer, mime };
-  } catch (error) {
-    console.error('downloadUsableImage error:', error);
-    return null;
-  }
-}
-
-function extractMetaContent(html, attrName, attrValue) {
-  const regex = new RegExp(
-    `<meta[^>]*${attrName}=["']${escapeRegex(attrValue)}["'][^>]*content=["']([^"']+)["'][^>]*>`,
-    'i'
-  );
-  const reverseRegex = new RegExp(
-    `<meta[^>]*content=["']([^"']+)["'][^>]*${attrName}=["']${escapeRegex(attrValue)}["'][^>]*>`,
-    'i'
-  );
-
-  const match = html.match(regex) || html.match(reverseRegex);
-  return match ? decodeHtml(match[1]) : '';
-}
-
-function extractLinkHrefByRelContains(html, relPart) {
-  const regex = /<link\b[^>]*rel=["']([^"']+)["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
-  let match;
-
-  while ((match = regex.exec(html)) !== null) {
-    const rel = safeString(match[1]).toLowerCase();
-    const href = safeString(match[2]);
-    if (rel.includes(relPart.toLowerCase()) && href) {
-      return decodeHtml(href);
-    }
-  }
-
-  const reverseRegex = /<link\b[^>]*href=["']([^"']+)["'][^>]*rel=["']([^"']+)["'][^>]*>/gi;
-  while ((match = reverseRegex.exec(html)) !== null) {
-    const href = safeString(match[1]);
-    const rel = safeString(match[2]).toLowerCase();
-    if (rel.includes(relPart.toLowerCase()) && href) {
-      return decodeHtml(href);
-    }
-  }
-
-  return '';
-}
-
-function extractTitle(html) {
-  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return match ? decodeHtml(match[1]) : '';
-}
-
-function absoluteUrl(value, baseUrl) {
-  try {
-    if (!value) return '';
-    return new URL(value, baseUrl).toString();
-  } catch {
-    return '';
-  }
-}
-
-function hostnameFromUrl(value) {
-  try {
-    return new URL(ensureUrl(value)).hostname.replace(/^www\./i, '');
-  } catch {
-    return safeString(value);
-  }
-}
-
-function ensureUrl(value) {
-  const raw = safeString(value);
-  if (!raw) return '';
-  if (/^https?:\/\//i.test(raw)) return raw;
-  return `https://${raw}`;
-}
-
-function escapeRegex(value) {
-  return safeString(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function decodeHtml(value) {
-  return safeString(value)
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>');
-}
-
-/* -------------------------------------------------------------------------- */
 /*                                   DRAWING                                  */
 /* -------------------------------------------------------------------------- */
 
-async function drawReport(doc, report, branding) {
-  await drawCover(doc, report, branding);
+function drawReport(doc, report) {
+  drawCover(doc, report);
   doc.addPage();
 
-  drawHeaderBar(doc, report, branding);
+  drawHeaderBar(doc, report);
   drawOverviewSection(doc, report);
   drawMetricsSection(doc, report);
   drawSummaryCards(doc, report);
@@ -540,7 +358,7 @@ async function drawReport(doc, report, branding) {
   });
 }
 
-async function drawCover(doc, report, branding) {
+function drawCover(doc, report) {
   const pageWidth = doc.page.width;
   const pageHeight = doc.page.height;
 
@@ -571,19 +389,22 @@ async function drawCover(doc, report, branding) {
 
   doc.fillColor(COLORS.ink)
     .font('Helvetica-Bold')
-    .fontSize(19)
-    .text(report.url, 72, 188, {
+    .fontSize(22)
+    .text(report.siteName, 72, 188, {
+      width: pageWidth - 144
+    });
+
+  doc.fillColor(COLORS.muted)
+    .font('Helvetica')
+    .fontSize(10.5)
+    .text(report.url, 72, 220, {
       width: pageWidth - 144
     });
 
   doc.fillColor(COLORS.muted)
     .font('Helvetica')
     .fontSize(11)
-    .text(`Generated: ${formatDate(report.scannedAt)}`, 72, 235);
-
-  if (branding?.logoBuffer) {
-    drawBrandLogoBlock(doc, branding, pageWidth - 190, 46, 120, 56);
-  }
+    .text(`Generated: ${formatDate(report.scannedAt)}`, 72, 246);
 
   drawScoreCard(doc, report.score, 50, 330, pageWidth - 100, 165);
 
@@ -598,36 +419,6 @@ async function drawCover(doc, report, branding) {
         width: pageWidth - 100
       }
     );
-}
-
-function drawBrandLogoBlock(doc, branding, x, y, w, h) {
-  doc.save();
-  doc.roundedRect(x, y, w, h, 14).fill('#FFFFFF');
-  doc.restore();
-
-  try {
-    doc.image(branding.logoBuffer, x + 12, y + 10, {
-      fit: [36, 36],
-      align: 'center',
-      valign: 'center'
-    });
-  } catch (error) {
-    console.error('Brand logo draw error:', error);
-  }
-
-  doc.fillColor(COLORS.text)
-    .font('Helvetica-Bold')
-    .fontSize(9)
-    .text(branding.siteName || 'Brand', x + 56, y + 16, {
-      width: w - 64
-    });
-
-  doc.fillColor(COLORS.muted)
-    .font('Helvetica')
-    .fontSize(7.5)
-    .text('Detected brand', x + 56, y + 30, {
-      width: w - 64
-    });
 }
 
 function drawSitePilotMark(doc, x, y) {
@@ -701,7 +492,7 @@ function drawScoreCard(doc, score, x, y, w, h) {
     .text(badgeText, x + 167, y + 117);
 }
 
-function drawHeaderBar(doc, report, branding) {
+function drawHeaderBar(doc, report) {
   doc.save();
   doc.roundedRect(50, 44, doc.page.width - 100, 42, 12).fill(COLORS.dark);
   doc.restore();
@@ -711,23 +502,19 @@ function drawHeaderBar(doc, report, branding) {
     .fontSize(14)
     .text('SitePilot Analysis Report', 68, 58);
 
-  if (branding?.logoBuffer) {
-    try {
-      doc.image(branding.logoBuffer, doc.page.width - 132, 50, {
-        fit: [20, 20],
-        align: 'center',
-        valign: 'center'
-      });
-    } catch (error) {
-      console.error('Header logo draw error:', error);
-    }
-  }
+  doc.fillColor('#D1D5DB')
+    .font('Helvetica')
+    .fontSize(10)
+    .text(report.siteName, doc.page.width - 230, 60, {
+      width: 90,
+      align: 'right'
+    });
 
   doc.fillColor('#D1D5DB')
     .font('Helvetica')
     .fontSize(10)
-    .text(formatDate(report.scannedAt), doc.page.width - 210, 60, {
-      width: 70,
+    .text(formatDate(report.scannedAt), doc.page.width - 135, 60, {
+      width: 65,
       align: 'right'
     });
 
@@ -742,13 +529,14 @@ function drawOverviewSection(doc, report) {
   const labelWidth = 90;
   const valueWidth = 220;
 
-  drawField(doc, 'URL', report.url, leftX, doc.y, labelWidth, valueWidth);
+  drawField(doc, 'Site', report.siteName, leftX, doc.y, labelWidth, valueWidth);
   drawField(doc, 'Title', report.title, rightX, doc.y - 34, labelWidth, valueWidth);
 
-  drawField(doc, 'Meta', report.metaDescription, leftX, doc.y + 4, labelWidth, valueWidth);
+  drawField(doc, 'URL', report.url, leftX, doc.y + 4, labelWidth, valueWidth);
   drawField(doc, 'H1', report.h1, rightX, doc.y - 58, labelWidth, valueWidth);
 
-  drawField(doc, 'Primary CTA', report.cta, leftX, doc.y + 4, labelWidth, valueWidth);
+  drawField(doc, 'Meta', report.metaDescription, leftX, doc.y + 4, labelWidth, valueWidth);
+  drawField(doc, 'Primary CTA', report.cta, rightX, doc.y - 58, labelWidth, valueWidth);
 
   doc.moveDown(1.3);
 }
@@ -897,7 +685,7 @@ function drawListSection(doc, title, items, options = {}) {
       ? items
       : ['No data available for this section.'];
 
-  ensureSpace(doc, 90 + safeItems.length * 28, { scannedAt: new Date().toISOString() });
+  ensureSpace(doc, 90 + safeItems.length * 28, reportFallback());
   sectionTitle(doc, title, options.accentLabel || '');
 
   const x = 50;
@@ -978,8 +766,15 @@ function addPageNumbers(doc) {
 function ensureSpace(doc, neededHeight, report) {
   if (doc.y + neededHeight > doc.page.height - 70) {
     doc.addPage();
-    drawHeaderBar(doc, report || { scannedAt: new Date().toISOString() }, null);
+    drawHeaderBar(doc, report || reportFallback());
   }
+}
+
+function reportFallback() {
+  return {
+    siteName: 'Website',
+    scannedAt: new Date().toISOString()
+  };
 }
 
 function formatDate(value) {
