@@ -3,46 +3,336 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SitePilot</title>
+  <title>SitePilot — AI Website Audit for SEO, UX & Conversion</title>
+  <meta
+    name="description"
+    content="SitePilot scans any website and gives instant AI feedback for SEO, UX, conversion and competitor comparison."
+  />
   <link rel="stylesheet" href="./style.css" />
   <link rel="stylesheet" href="./sitepilot-results.css" />
+  <link rel="stylesheet" href="./landing.css" />
 </head>
 <body>
-  <main class="container">
+  <div class="lp-shell">
+    <header class="lp-header">
+      <div class="lp-container lp-header-inner">
+        <a href="#" class="lp-logo">
+          <span class="lp-logo-mark">SP</span>
+          <span>SitePilot</span>
+        </a>
 
-    <!-- TOP BAR -->
-    <div style="
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      margin-bottom:20px;
-    ">
-      <div style="font-weight:800; font-size:18px;">SitePilot</div>
+        <nav class="lp-nav">
+          <a href="#features">Features</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="#who-its-for">Who it's for</a>
+          <a href="#scanner">Try it</a>
+        </nav>
 
-      <div style="display:flex; gap:10px;">
-        <a href="./auth.html" class="sp-button-secondary">Log In</a>
-        <a href="./auth.html" class="sp-button-primary">Get Started</a>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <a
+            href="./auth.html"
+            style="
+              display:inline-flex;
+              align-items:center;
+              justify-content:center;
+              min-height:44px;
+              padding:0 16px;
+              border-radius:999px;
+              background:#ffffff;
+              color:#0f172a;
+              text-decoration:none;
+              font-size:14px;
+              font-weight:700;
+              border:1px solid rgba(148,163,184,0.22);
+              box-shadow:0 12px 24px rgba(15,23,42,0.06);
+            "
+          >
+            Log In
+          </a>
+
+          <a href="./auth.html" class="lp-nav-cta">Get Started</a>
+        </div>
       </div>
-    </div>
+    </header>
 
-    <!-- HERO -->
-    <section class="hero-card">
-      <span class="badge">AI Website Scanner</span>
-      <h1>SitePilot</h1>
-      <p class="subtext">
-        Scan any website and get instant AI feedback for SEO, clarity, UX, and conversion improvements.
-      </p>
+    <main>
+      <section class="lp-hero">
+        <div class="lp-container lp-hero-grid">
+          <div class="lp-hero-copy">
+            <div class="lp-pill">AI Website Scanner</div>
 
-      <div class="scan-box">
-        <input id="urlInput" type="text" placeholder="https://example.com" />
-        <button id="scanBtn">Scan Website</button>
+            <h1>
+              Improve your website with
+              <span>clear AI actions</span>
+            </h1>
+
+            <p class="lp-hero-text">
+              SitePilot scans your page and shows exactly what to improve for SEO,
+              clarity, UX, conversion and competitor positioning — in seconds.
+            </p>
+
+            <div class="lp-hero-actions">
+              <a href="./auth.html" class="lp-btn lp-btn-primary">Get Started</a>
+              <a href="#features" class="lp-btn lp-btn-secondary">See Features</a>
+            </div>
+
+            <div class="lp-proof-row">
+              <div class="lp-proof-card">
+                <strong>SEO</strong>
+                <span>Titles, meta, H1, structure</span>
+              </div>
+              <div class="lp-proof-card">
+                <strong>UX</strong>
+                <span>Clarity, CTA and page guidance</span>
+              </div>
+              <div class="lp-proof-card">
+                <strong>Conversion</strong>
+                <span>Fix the biggest growth blockers</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="lp-hero-panel">
+            <div class="lp-panel-card lp-panel-card-main">
+              <div class="lp-panel-top">
+                <span class="lp-panel-label">Example Audit</span>
+                <span class="lp-panel-score">82/100</span>
+              </div>
+
+              <h3>sitepilot-demo.com</h3>
+              <p>
+                Strong foundation. Biggest gains now come from better CTA clarity,
+                stronger metadata and tighter messaging.
+              </p>
+
+              <div class="lp-mini-list">
+                <div class="lp-mini-item">Priority Fix: Improve primary CTA copy</div>
+                <div class="lp-mini-item">Next Action: Rewrite title for stronger SEO intent</div>
+                <div class="lp-mini-item">Compare: See how competitor messaging differs</div>
+              </div>
+            </div>
+
+            <div class="lp-panel-card lp-panel-card-side">
+              <span class="lp-panel-label">Competitor Compare</span>
+              <div class="lp-compare-demo">
+                <div>
+                  <strong>Your site</strong>
+                  <span>74</span>
+                </div>
+                <div>
+                  <strong>Competitor</strong>
+                  <span>81</span>
+                </div>
+              </div>
+              <p>See exactly what they do better and what you should fix first.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="lp-section" id="features">
+        <div class="lp-container">
+          <div class="lp-section-head">
+            <div class="lp-pill">What SitePilot does</div>
+            <h2>Everything you need to improve a landing page faster</h2>
+            <p>
+              SitePilot turns raw page analysis into practical actions that are easy
+              to understand and easy to execute.
+            </p>
+          </div>
+
+          <div class="lp-feature-grid">
+            <article class="lp-feature-card">
+              <h3>Website Scan</h3>
+              <p>
+                Instantly detect title, meta description, H1, links, images, buttons
+                and CTA structure.
+              </p>
+            </article>
+
+            <article class="lp-feature-card">
+              <h3>AI Feedback</h3>
+              <p>
+                Get concrete improvement suggestions focused on clarity, SEO and conversion.
+              </p>
+            </article>
+
+            <article class="lp-feature-card">
+              <h3>Priority Fixes</h3>
+              <p>
+                See the top issues you should fix first instead of guessing what matters most.
+              </p>
+            </article>
+
+            <article class="lp-feature-card">
+              <h3>Top Next Actions</h3>
+              <p>
+                Get business-focused next steps that move the page toward better performance.
+              </p>
+            </article>
+
+            <article class="lp-feature-card">
+              <h3>PDF Reports</h3>
+              <p>
+                Export polished reports that look professional and are easy to share.
+              </p>
+            </article>
+
+            <article class="lp-feature-card">
+              <h3>Competitor Comparison</h3>
+              <p>
+                Compare your page against a competitor and see where they currently win.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="lp-section lp-section-alt" id="how-it-works">
+        <div class="lp-container">
+          <div class="lp-section-head">
+            <div class="lp-pill">How it works</div>
+            <h2>Simple flow, strong output</h2>
+            <p>
+              No setup. No dashboard complexity. Just scan, compare and improve.
+            </p>
+          </div>
+
+          <div class="lp-steps">
+            <article class="lp-step-card">
+              <div class="lp-step-number">01</div>
+              <h3>Enter a website</h3>
+              <p>Paste your website URL and run an instant AI scan.</p>
+            </article>
+
+            <article class="lp-step-card">
+              <div class="lp-step-number">02</div>
+              <h3>Review the score</h3>
+              <p>See overall quality, issues, fixes and next actions in one place.</p>
+            </article>
+
+            <article class="lp-step-card">
+              <div class="lp-step-number">03</div>
+              <h3>Compare with competitors</h3>
+              <p>Benchmark your page and find what the competitor does better.</p>
+            </article>
+
+            <article class="lp-step-card">
+              <div class="lp-step-number">04</div>
+              <h3>Export and execute</h3>
+              <p>Download the PDF and turn the report into your improvement roadmap.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="lp-section" id="who-its-for">
+        <div class="lp-container">
+          <div class="lp-section-head">
+            <div class="lp-pill">Who it helps</div>
+            <h2>Built for teams that want better pages without wasting time</h2>
+            <p>
+              SitePilot is especially useful when speed, clarity and conversion matter.
+            </p>
+          </div>
+
+          <div class="lp-audience-grid">
+            <article class="lp-audience-card">
+              <h3>Founders</h3>
+              <p>
+                Validate messaging, sharpen landing pages and improve first impressions fast.
+              </p>
+            </article>
+
+            <article class="lp-audience-card">
+              <h3>Freelancers</h3>
+              <p>
+                Use reports to audit client pages and show clear improvement opportunities.
+              </p>
+            </article>
+
+            <article class="lp-audience-card">
+              <h3>Agencies</h3>
+              <p>
+                Turn audits into a faster sales and delivery workflow with polished output.
+              </p>
+            </article>
+
+            <article class="lp-audience-card">
+              <h3>Marketing teams</h3>
+              <p>
+                Benchmark pages against competitors and prioritize the changes that matter most.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="lp-section lp-scanner-section" id="scanner">
+        <div class="lp-container">
+          <div class="lp-section-head lp-section-head-left">
+            <div class="lp-pill">Try SitePilot</div>
+            <h2>Run your scan now</h2>
+            <p>
+              Paste your page, compare it with a competitor and see where to improve first.
+            </p>
+          </div>
+
+          <section class="hero-card lp-app-card">
+            <span class="badge">AI Website Scanner</span>
+            <h1>SitePilot</h1>
+            <p class="subtext">
+              Scan any website and get instant AI feedback for SEO, clarity, UX, conversion and competitor comparison.
+            </p>
+
+            <div class="scan-box">
+              <input id="urlInput" type="text" placeholder="https://your-site.com" />
+              <button id="scanBtn">Scan Website</button>
+            </div>
+
+            <div class="compare-box">
+              <div class="compare-label">Competitor Comparison</div>
+              <div class="compare-grid">
+                <input id="competitorInput" type="text" placeholder="https://competitor.com" />
+                <button id="compareBtn">Compare Websites</button>
+              </div>
+            </div>
+
+            <div id="status"></div>
+            <div id="result" class="result"></div>
+            <div id="historyBox" style="margin-top:24px;"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="lp-section">
+        <div class="lp-container">
+          <div class="lp-cta-banner">
+            <div>
+              <div class="lp-pill">Ready to improve your page?</div>
+              <h2>Use SitePilot to find the highest-impact fixes faster</h2>
+              <p>
+                Scan your website, benchmark against competitors and export a report you can actually use.
+              </p>
+            </div>
+            <a href="./auth.html" class="lp-btn lp-btn-primary">Get Started</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="lp-footer">
+      <div class="lp-container lp-footer-inner">
+        <div class="lp-footer-brand">
+          <span class="lp-logo-mark">SP</span>
+          <span>SitePilot</span>
+        </div>
+        <div class="lp-footer-text">
+          AI website audits for SEO, UX and conversion.
+        </div>
       </div>
-
-      <div id="status"></div>
-      <div id="result" class="result"></div>
-      <div id="historyBox" style="margin-top:24px;"></div>
-    </section>
-  </main>
+    </footer>
+  </div>
 
   <script
     src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
@@ -50,7 +340,6 @@
     crossorigin="anonymous"
     referrerpolicy="no-referrer"
   ></script>
-
   <script src="./sitepilot-results.js"></script>
   <script src="./script.js"></script>
 </body>
