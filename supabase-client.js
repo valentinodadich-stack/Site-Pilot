@@ -1,5 +1,5 @@
-const SUPABASE_URL = "PASTE_YOUR_SUPABASE_URL_HERE";
-const SUPABASE_ANON_KEY = "PASTE_YOUR_SUPABASE_ANON_KEY_HERE";
+const SUPABASE_URL = "https://vzdxrpytdkzdjfovcnkz.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_Y1RmHPVAuBYu_QraFpr1_w_uaV1DQJz";
 
 if (!window.supabase || typeof window.supabase.createClient !== "function") {
   throw new Error("Supabase client library failed to load.");
