@@ -6,6 +6,6 @@ if (!window.supabase || typeof window.supabase.createClient !== "function") {
 }
 
 window.sitePilotSupabase = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
+  https://vzdxrpytdkzdjfovcnkz.supabase.co,
+  sb_publishable_Y1RmHPVAuBYu_QraFpr1_w_uaV1DQJz
 );
