@@ -1,62 +1,48 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 export default async function handler(req, res) {
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
   try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_KEY;
+    const authHeader = req.headers.authorization;
 
-    if (!supabaseUrl || !supabaseKey) {
+    if (!authHeader) {
+      return res.status(401).json({ error: 'Missing auth token' });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+
+    const {
+      data: { user },
+      error: userError
+    } = await supabase.auth.getUser(token);
+
+    if (userError || !user) {
+      return res.status(401).json({ error: 'Invalid user' });
+    }
+
+    const { data, error } = await supabase
+      .from('scans')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (error) {
       return res.status(500).json({
-        error: "Missing Supabase credentials"
+        error: 'Failed to load history',
+        details: error.message
       });
     }
 
-    const headers = {
-      "Content-Type": "application/json",
-      "apikey": supabaseKey,
-      "Authorization": `Bearer ${supabaseKey}`
-    };
-
-    // prvo probaj tablicu Scans
-    let response = await fetch(
-      `${supabaseUrl}/rest/v1/Scans?select=*&order=created_at.desc.nullslast&limit=10`,
-      {
-        method: "GET",
-        headers
-      }
-    );
-
-    // ako ne uspije, probaj scans
-    if (!response.ok) {
-      response = await fetch(
-        `${supabaseUrl}/rest/v1/scans?select=*&order=created_at.desc.nullslast&limit=10`,
-        {
-          method: "GET",
-          headers
-        }
-      );
-    }
-
-    if (!response.ok) {
-      const text = await response.text();
-      return res.status(500).json({
-        error: "Failed to fetch history",
-        details: text
-      });
-    }
-
-    const history = await response.json();
-
-    return res.status(200).json({
-      success: true,
-      history: Array.isArray(history) ? history : []
-    });
-  } catch (error) {
+    return res.status(200).json({ history: data });
+  } catch (err) {
     return res.status(500).json({
-      error: "History fetch failed",
-      details: error.message
+      error: 'Server error',
+      details: err.message
     });
   }
 }
