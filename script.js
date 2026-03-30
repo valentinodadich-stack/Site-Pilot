@@ -11,20 +11,29 @@ let lastScanData = null;
 
 loadHistoryFromDatabase();
 
-scanBtn.addEventListener("click", handleScan);
-compareBtn.addEventListener("click", handleCompare);
+if (scanBtn) {
+  scanBtn.addEventListener("click", handleScan);
+}
 
-urlInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    handleScan();
-  }
-});
+if (compareBtn) {
+  compareBtn.addEventListener("click", handleCompare);
+}
 
-competitorInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    handleCompare();
-  }
-});
+if (urlInput) {
+  urlInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      handleScan();
+    }
+  });
+}
+
+if (competitorInput) {
+  competitorInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      handleCompare();
+    }
+  });
+}
 
 async function safeReadJson(response) {
   const text = await response.text();
@@ -39,8 +48,28 @@ async function safeReadJson(response) {
   }
 }
 
+async function getAccessToken() {
+  if (!window.sitePilotSupabase) {
+    return null;
+  }
+
+  try {
+    const { data, error } = await window.sitePilotSupabase.auth.getSession();
+
+    if (error) {
+      console.error("Failed to get session:", error);
+      return null;
+    }
+
+    return data?.session?.access_token || null;
+  } catch (error) {
+    console.error("Failed to read access token:", error);
+    return null;
+  }
+}
+
 async function handleScan() {
-  const url = urlInput.value.trim();
+  const url = urlInput?.value?.trim() || "";
 
   if (!url) {
     statusBox.textContent = "Please enter a URL.";
@@ -64,10 +93,13 @@ async function handleScan() {
     let saveMessage = "";
 
     try {
+      const token = await getAccessToken();
+
       const saveResponse = await fetch("/api/save", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           url: lastScanData.url,
@@ -109,8 +141,8 @@ async function handleScan() {
 }
 
 async function handleCompare() {
-  const primaryUrl = urlInput.value.trim();
-  const competitorUrl = competitorInput.value.trim();
+  const primaryUrl = urlInput?.value?.trim() || "";
+  const competitorUrl = competitorInput?.value?.trim() || "";
 
   if (!primaryUrl || !competitorUrl) {
     statusBox.textContent = "Enter both your website and competitor website.";
@@ -198,7 +230,14 @@ async function runScan(url) {
 
 async function loadHistoryFromDatabase() {
   try {
-    const response = await fetch("/api/history");
+    const token = await getAccessToken();
+
+    const response = await fetch("/api/history", {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    });
+
     const data = await safeReadJson(response);
 
     if (!response.ok) {
@@ -614,7 +653,9 @@ function openHistoryScan(index) {
   });
 
   lastScanData = reconstructed;
-  urlInput.value = reconstructed.url;
+  if (urlInput) {
+    urlInput.value = reconstructed.url;
+  }
   statusBox.textContent = `Loaded saved scan from ${item.created_at || "database"}.`;
   renderFullScan(reconstructed);
 
@@ -987,13 +1028,18 @@ function getDisplaySiteName(url) {
 }
 
 function setLoadingState(isLoading, mode = "scan") {
-  scanBtn.disabled = isLoading;
-  compareBtn.disabled = isLoading;
-  urlInput.disabled = isLoading;
-  competitorInput.disabled = isLoading;
+  if (scanBtn) scanBtn.disabled = isLoading;
+  if (compareBtn) compareBtn.disabled = isLoading;
+  if (urlInput) urlInput.disabled = isLoading;
+  if (competitorInput) competitorInput.disabled = isLoading;
 
-  scanBtn.textContent = isLoading && mode === "scan" ? "Scanning..." : "Scan Website";
-  compareBtn.textContent = isLoading && mode === "compare" ? "Comparing..." : "Compare Websites";
+  if (scanBtn) {
+    scanBtn.textContent = isLoading && mode === "scan" ? "Scanning..." : "Scan Website";
+  }
+
+  if (compareBtn) {
+    compareBtn.textContent = isLoading && mode === "compare" ? "Comparing..." : "Compare Websites";
+  }
 }
 
 function safeString(value, fallback = "") {
