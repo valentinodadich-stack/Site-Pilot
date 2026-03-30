@@ -8,17 +8,36 @@ const supabase = window.sitePilotSupabase;
 
 initAuthPage();
 
-signupBtn.addEventListener("click", handleSignUp);
-loginBtn.addEventListener("click", handleLogin);
+if (signupBtn) {
+  signupBtn.addEventListener("click", handleSignUp);
+}
 
-passwordInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    handleLogin();
-  }
-});
+if (loginBtn) {
+  loginBtn.addEventListener("click", handleLogin);
+}
+
+if (passwordInput) {
+  passwordInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      handleLogin();
+    }
+  });
+}
 
 async function initAuthPage() {
   try {
+    if (window.sitePilotSupabaseInitError) {
+      showStatus(`Supabase init error: ${window.sitePilotSupabaseInitError}`, "error");
+      return;
+    }
+
+    if (!supabase) {
+      showStatus("Supabase client is not available.", "error");
+      return;
+    }
+
+    showStatus("Auth ready.", "success");
+
     const { data, error } = await supabase.auth.getSession();
 
     if (error) {
@@ -27,6 +46,7 @@ async function initAuthPage() {
     }
 
     if (data?.session) {
+      showStatus("Session found. Redirecting...", "success");
       window.location.href = "./dashboard.html";
       return;
     }
@@ -42,8 +62,13 @@ async function initAuthPage() {
 }
 
 async function handleSignUp() {
-  const email = emailInput.value.trim();
-  const password = passwordInput.value.trim();
+  const email = emailInput?.value?.trim() || "";
+  const password = passwordInput?.value?.trim() || "";
+
+  if (!supabase) {
+    showStatus("Supabase client is not ready.", "error");
+    return;
+  }
 
   if (!email || !password) {
     showStatus("Enter email and password.", "error");
@@ -92,8 +117,13 @@ async function handleSignUp() {
 }
 
 async function handleLogin() {
-  const email = emailInput.value.trim();
-  const password = passwordInput.value.trim();
+  const email = emailInput?.value?.trim() || "";
+  const password = passwordInput?.value?.trim() || "";
+
+  if (!supabase) {
+    showStatus("Supabase client is not ready.", "error");
+    return;
+  }
 
   if (!email || !password) {
     showStatus("Enter email and password.", "error");
@@ -131,17 +161,22 @@ async function handleLogin() {
 }
 
 function setLoading(isLoading, mode) {
-  signupBtn.disabled = isLoading;
-  loginBtn.disabled = isLoading;
+  if (signupBtn) {
+    signupBtn.disabled = isLoading;
+    signupBtn.textContent =
+      isLoading && mode === "signup" ? "Creating..." : "Sign Up";
+  }
 
-  signupBtn.textContent =
-    isLoading && mode === "signup" ? "Creating..." : "Sign Up";
-
-  loginBtn.textContent =
-    isLoading && mode === "login" ? "Logging in..." : "Log In";
+  if (loginBtn) {
+    loginBtn.disabled = isLoading;
+    loginBtn.textContent =
+      isLoading && mode === "login" ? "Logging in..." : "Log In";
+  }
 }
 
 function showStatus(message, type) {
+  if (!authStatus) return;
+
   authStatus.textContent = message;
   authStatus.className = "auth-status";
   if (type) {
